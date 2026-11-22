@@ -59,6 +59,27 @@ def _wrap(words: list[Word], max_line: int) -> str:
     return best
 
 
+def wrap_text(text: str, max_line: int = Rules.max_line) -> str:
+    """Wrap plain text (for example a translation) by the same rules as `_wrap`. When no break
+    keeps both lines short enough, the most even break is used anyway."""
+    text = " ".join(text.split())
+    if len(text) <= max_line or " " not in text:
+        return text
+    words = [Word((" " if i else "") + t, 0.0, 0.0) for i, t in enumerate(text.split(" "))]
+    wrapped = _wrap(words, max_line)
+    if "\n" in wrapped:
+        return wrapped
+    best, best_score = text, None
+    acc = ""
+    for i in range(1, len(words)):
+        acc += words[i - 1].text
+        top, bottom = acc.strip(), _text(words[i:])
+        score = max(len(top), len(bottom)) - (4 if top.endswith(_CLAUSE_END + _SENTENCE_END) else 0)
+        if best_score is None or score < best_score:
+            best, best_score = f"{top}\n{bottom}", score
+    return best
+
+
 def _fits(words: list[Word], rules: Rules) -> bool:
     if words[-1].end - words[0].start > rules.max_duration:
         return False

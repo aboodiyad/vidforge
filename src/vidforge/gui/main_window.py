@@ -14,8 +14,8 @@ from ..core.settings import Settings
 from . import icons, theme
 from .bridge import JobBridge
 from .i18n import tr
+from .pages.dub import DubPage
 from .pages.faces import FacesPage
-from .pages.placeholder import ComingSoonPage
 from .pages.settings import SettingsPage
 from .pages.subtitles import SubtitlesPage
 from .pages.system import SystemPage
@@ -74,7 +74,7 @@ class MainWindow(QMainWindow):
             ("upscale", tr("nav.upscale"), False, UpscalePage(self.bridge, self.settings)),
             ("face", tr("nav.faces"), False, FacesPage(self.bridge, self.settings)),
             ("subtitles", tr("nav.subtitles"), False, SubtitlesPage(self.bridge, self.settings)),
-            ("translate", tr("nav.dub"), True, ComingSoonPage("dub", "translate")),
+            ("translate", tr("nav.dub"), False, DubPage(self.bridge, self.settings)),
         ]
         bottom_pages = [
             ("chip", tr("nav.system"), False, SystemPage(self.bridge)),

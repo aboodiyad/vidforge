@@ -50,6 +50,59 @@ def transcript_path(src: Path) -> Path:
     return paths.data_root() / "transcripts" / f"{src.stem}-{key}.json"
 
 
+def load_transcript(src: Path) -> Transcript | None:
+    """The saved transcript of *src*, if it was transcribed before (and not changed since)."""
+    try:
+        return Transcript.from_json(json.loads(transcript_path(src).read_text(encoding="utf-8")))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def transcribe_video(src: Path, info: MediaInfo, *, level: str, language: str, translate: bool,
+                     audio_track: int, gpu, ctx: JobContext, span: tuple[float, float] = (0.0, 1.0)) -> Transcript:
+    """Speech -> timed words (whisper.cpp + voice detection). The result is saved as the video's
+    transcript (unless it was translated to English) and the speed is learned for estimates.
+    Progress is reported within *span* of the job."""
+    a, b = span
+    work = paths.temp_dir() / f"subs-{uuid.uuid4().hex[:12]}"
+    wav = work / "audio.wav"
+    try:
+        extract_audio(src, info, audio_track, wav, cancel=ctx.cancel,
+                      on_progress=lambda f, m: ctx.report(None if f is None else a + f * (b - a) * 0.04, m, phase="preparing"))
+
+        def dl(done: int, total: int | None) -> None:
+            ctx.report(None, f"downloading model {done / 1e6:.0f}/{(total or 0) / 1e6:.0f} MB", phase="downloading")
+
+        model = models.ensure(level, progress=dl, cancel=ctx.cancel)
+        vad = models.ensure_vad(cancel=ctx.cancel)
+        listen_started = time.monotonic()
+        tr: Transcript = transcribe(
+            wav, work / "words", gpu=gpu, model=model, vad_model=vad, dtw=models.SPEECH_MODELS[level].dtw,
+            language=None if language == "auto" else language, translate=translate,
+            cancel=ctx.cancel, on_log=ctx.log,
+            on_progress=lambda f, m: ctx.report(None if f is None else a + (b - a) * (0.05 + f * 0.95), m, phase="working"),
+        )
+        listen_seconds = time.monotonic() - listen_started
+    finally:
+        for f in work.glob("*"):
+            remove_quietly(f)
+        try:
+            work.rmdir()
+        except OSError:
+            pass
+    if not tr.words:
+        raise FriendlyError("no_speech", "no speech was found in this video")
+    if not translate:
+        tp = transcript_path(src)
+        tp.parent.mkdir(parents=True, exist_ok=True)
+        tp.write_text(json.dumps(tr.to_json(), ensure_ascii=False), encoding="utf-8")
+    try:
+        estimate.learn(level, info.duration or 0.0, listen_seconds, gpu)
+    except Exception:
+        pass
+    return tr
+
+
 def mux_subtitles(src: Path, info: MediaInfo, srt_path: Path, dst: Path, lang3: str, *, cancel, on_progress) -> None:
     container = "mp4" if dst.suffix.lower() in (".mp4", ".m4v", ".mov") else "mkv"
     args: list = ["-i", src, "-i", srt_path, "-map", "0:v", "-map", "0:a?"]
@@ -81,41 +134,11 @@ def run_subtitles(req: SubtitleRequest, ctx: JobContext) -> Path:
     if not info.audio:
         raise FriendlyError("no_audio", "this video has no sound")
     gpu = pick_gpu(req.gpu_index)
-    work = paths.temp_dir() / f"subs-{uuid.uuid4().hex[:12]}"
-    wav = work / "audio.wav"
     started = time.monotonic()
-    try:
-        extract_audio(src, info, req.audio_track, wav, cancel=ctx.cancel,
-                      on_progress=lambda f, m: ctx.report(None if f is None else f * 0.04, m, phase="preparing"))
-
-        def dl(done: int, total: int | None) -> None:
-            ctx.report(None, f"downloading model {done / 1e6:.0f}/{(total or 0) / 1e6:.0f} MB", phase="downloading")
-
-        model = models.ensure(req.level, progress=dl, cancel=ctx.cancel)
-        vad = models.ensure_vad(cancel=ctx.cancel)
-        listen_started = time.monotonic()
-        tr: Transcript = transcribe(
-            wav, work / "words", gpu=gpu, model=model, vad_model=vad, dtw=models.SPEECH_MODELS[req.level].dtw,
-            language=None if req.language == "auto" else req.language, translate=req.translate,
-            cancel=ctx.cancel, on_log=ctx.log,
-            on_progress=lambda f, m: ctx.report(None if f is None else 0.05 + f * 0.9, m, phase="working"),
-        )
-        listen_seconds = time.monotonic() - listen_started
-    finally:
-        for f in work.glob("*"):
-            remove_quietly(f)
-        try:
-            work.rmdir()
-        except OSError:
-            pass
-    if not tr.words:
-        raise FriendlyError("no_speech", "no speech was found in this video")
-
+    tr = transcribe_video(src, info, level=req.level, language=req.language, translate=req.translate,
+                          audio_track=req.audio_track, gpu=gpu, ctx=ctx, span=(0.0, 0.95))
     lang = "en" if req.translate else tr.language
     ctx.log(f"language {tr.language}{' -> en' if req.translate else ''}, {len(tr.words)} words")
-    tp = transcript_path(src)
-    tp.parent.mkdir(parents=True, exist_ok=True)
-    tp.write_text(json.dumps(tr.to_json(), ensure_ascii=False), encoding="utf-8")
 
     cues = cues_from_words(tr.words, Rules())
     folder = req.output_dir or src.parent
@@ -140,10 +163,6 @@ def run_subtitles(req: SubtitleRequest, ctx: JobContext) -> Path:
             raise
         result = dst
 
-    try:
-        estimate.learn(req.level, info.duration or 0.0, listen_seconds, gpu)
-    except Exception:
-        pass
     ctx.log(f"done in {time.monotonic() - started:.0f}s: {len(cues)} subtitles")
     ctx.report(1.0, f"done: {result.name}", phase="done")
     return result

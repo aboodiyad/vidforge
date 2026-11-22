@@ -16,6 +16,7 @@ PATHS = {
     "face": '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.6c1.9 2 5.1 2 7 0"/><path d="M9.2 9.6h.01M14.8 9.6h.01" stroke-width="2.4"/>',
     "subtitles": '<rect x="3" y="5" width="18" height="14" rx="2.6"/><path d="M7 15h4M13.5 15H17M7 11h10"/>',
     "translate": '<path d="M3.5 6h9M8 3.8V6M5.6 6c.8 3.6 3 6.2 6 7.6M10.4 6c-.8 3.6-3 6.2-6 7.6"/><path d="M13 20.5l4-9.5 4 9.5M14.6 17h4.8"/>',
+    "voice": '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>',
     "settings": '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/>',
     "chip": '<rect x="6" y="6" width="12" height="12" rx="2.2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/>',
     "film": '<rect x="3" y="4" width="18" height="16" rx="2.6"/><path d="M7.5 4v16M16.5 4v16M3 9h4.5M3 15h4.5M16.5 9H21M16.5 15H21"/>',

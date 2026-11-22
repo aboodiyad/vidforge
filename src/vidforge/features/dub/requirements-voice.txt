@@ -1,0 +1,19 @@
+# Voice add-on for "Translate & dub". Installed into its own Python environment
+# (vidforge-data\addons\voice) because Chatterbox needs numpy 1.x and PyTorch 2.6, while
+# VidForge itself uses numpy 2. PyTorch (torch, torchaudio 2.6.0) is installed first from the
+# PyTorch index (CUDA 12.4 build on NVIDIA PCs, CPU build otherwise); then this file from PyPI;
+# then chatterbox-tts==0.1.7 itself with --no-deps (its own list pulls in Gradio, a web UI we
+# don't use, and Chinese/Hebrew/Russian helpers that it loads only when present).
+numpy>=1.24,<2
+librosa==0.11.0
+s3tokenizer
+transformers==5.2.0
+diffusers==0.29.0
+resemble-perth>=1.0.0
+conformer==0.3.2
+safetensors==0.5.3
+pyloudnorm
+omegaconf
+pykakasi==2.3.0
+soundfile
+demucs==4.1.0

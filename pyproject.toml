@@ -33,3 +33,4 @@ testpaths = ["tests"]
 
 [tool.setuptools.package-data]
 "vidforge.gui" = ["assets/fonts/*.ttf", "assets/fonts/*.txt"]
+"vidforge.features.dub" = ["requirements-voice.txt"]

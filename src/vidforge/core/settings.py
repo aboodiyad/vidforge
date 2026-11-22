@@ -30,6 +30,13 @@ class Settings:
     subs_level: str = "balanced"
     subs_add_to_video: bool = False
     subs_audio_track: int = 0
+    dub_target: str = "ar"
+    dub_voice: bool = True  # False = translated subtitles only
+    dub_level: str = "best"
+    dub_add_to_video: bool = True  # subtitles only: also a copy of the video with them inside
+    dub_keep_original: bool = True
+    dub_language: str = "auto"
+    dub_audio_track: int = 0
     gpu_index: int = 0
     output_dir: str = ""
     keep_temp_files: bool = False

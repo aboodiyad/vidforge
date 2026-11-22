@@ -26,6 +26,7 @@ class ModelSpec:
     license: str
     feature: str
     commercial_ok: bool = True
+    folder: str | None = None  # shared folder for models made of several files (default: key)
 
     def __post_init__(self) -> None:
         if len(self.sha256) != 64:
@@ -44,7 +45,7 @@ def register(spec: ModelSpec) -> ModelSpec:
 
 def model_path(key: str) -> Path:
     spec = MODELS[key]
-    return paths.models_dir() / spec.key / spec.filename
+    return paths.models_dir() / (spec.folder or spec.key) / spec.filename
 
 
 def is_installed(key: str, verify: bool = False) -> bool:

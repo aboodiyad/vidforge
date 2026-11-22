@@ -14,9 +14,13 @@ A Windows app for making videos look better, built from open-source parts.
   make the video bigger at the same time.
 - **Write the words**: listens to the video and writes subtitles (.srt) in the spoken language or
   in English, with each line at the right moment. Can also add them inside a copy of the video.
+- **Translate & dub**: turns the speech into another language. Translated subtitles always; and if
+  you want, a new voice: every person speaks the new language in a voice like their own, while the
+  music and sounds stay. The result is a copy of the video with the new voice as the main sound,
+  the original sound as a second track, and the translated subtitles as a track you can turn on.
+  Translation runs on your PC with a local AI (Gemma 3 12B for "Best", Qwen3 8B for "Quick").
+  The voice needs a one-time **voice add-on** (about 5 GB with an NVIDIA card), offered on that page.
 - **English and Arabic** (right-to-left). Change it in **Settings**.
-
-**Coming next**: translation and dubbing.
 
 ## Try it
 
@@ -40,6 +44,12 @@ Later, just double-click **`Start VidForge.bat`** again.
 - Quality mode downloads its AI model (5–67 MB) the first time you use it.
 - Quality mode is much slower than Fast: start with a short clip.
 - The **System** page shows your GPU and can test whether RTX Video Super Resolution works.
+- Translate & dub downloads its AI files the first time: the translator (7.3 GB for Best, 5 GB for
+  Quick) and the voice models (3.3 GB). A new voice takes about twice as long as the video on an
+  RTX 2060 SUPER; subtitles only take a minute or two. It needs a card with 8 GB of video memory
+  to run at full speed; with less it still works, more slowly.
+- The new voice speaks 23 languages (Arabic, English, French, Spanish, German, Turkish, Russian,
+  Hindi, Chinese, Japanese and more). Subtitles can be translated into any language in the list.
 
 ## Command line
 
@@ -50,6 +60,10 @@ Later, just double-click **`Start VidForge.bat`** again.
 .venv\Scripts\vidforge faces --help
 .venv\Scripts\vidforge subs my_video.mp4 --level balanced
 .venv\Scripts\vidforge subs --help
+.venv\Scripts\vidforge addon install          # the voice add-on, once
+.venv\Scripts\vidforge dub my_video.mp4 --to ar
+.venv\Scripts\vidforge dub my_video.mp4 --to fr --subtitles-only --add-to-video
+.venv\Scripts\vidforge dub --help
 ```
 
 ## Credits
@@ -60,6 +74,12 @@ Later, just double-click **`Start VidForge.bat`** again.
   as ONNX files from [FaceFusion's model releases](https://github.com/facefusion/facefusion-assets)
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with OpenAI Whisper models (MIT) and the
   [Silero](https://github.com/snakers4/silero-vad) voice detector (MIT)
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT) with [Gemma 3 12B](https://huggingface.co/google/gemma-3-12b-it)
+  (Gemma Terms of Use; GGUF by [Unsloth](https://huggingface.co/unsloth/gemma-3-12b-it-GGUF)) and
+  [Qwen3 8B](https://huggingface.co/Qwen/Qwen3-8B-GGUF) (Apache-2.0)
+- [Chatterbox Multilingual](https://github.com/resemble-ai/chatterbox) voice by Resemble AI (MIT; its
+  output carries Resemble's inaudible Perth watermark), [Demucs](https://github.com/facebookresearch/demucs)
+  voice separation (MIT), [PyTorch](https://pytorch.org) (BSD)
 - [OpenCV](https://opencv.org) (Apache-2.0); interface font IBM Plex Sans Arabic (SIL Open Font License)
 - [FFmpeg](https://ffmpeg.org) (GPL build from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds))
 - [ONNX Runtime](https://onnxruntime.ai) with DirectML, [Qt for Python (PySide6)](https://doc.qt.io/qtforpython/)

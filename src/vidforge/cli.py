@@ -181,6 +181,46 @@ def cmd_subs(args) -> int:
     return _run_jobs(args, make)
 
 
+def cmd_dub(args) -> int:
+    from .features.dub.service import DubRequest, run_dub
+
+    _, output_dir = _out(args)
+
+    def make(path: Path):
+        req = DubRequest(
+            input=path, target=args.to, dub=not args.subtitles_only, add_to_video=args.add_to_video,
+            level=args.level, keep_original=not args.no_original, language=args.language,
+            audio_track=args.track - 1, output_dir=output_dir, gpu_index=args.gpu, overwrite=args.overwrite,
+            keep_temp=args.keep_temp,
+        )
+        return lambda ctx: run_dub(req, ctx)
+
+    return _run_jobs(args, make)
+
+
+def cmd_addon(args) -> int:
+    from .features.dub import addon
+
+    if args.action == "status":
+        st = addon.status()
+        print(f"voice add-on: {'installed (' + st['device'] + ')' if st else 'not installed'} at {addon.root()}")
+        return 0
+    if args.action == "remove":
+        addon.remove()
+        print("voice add-on removed")
+        return 0
+    from .core.process import CancelToken
+
+    g = gpu.detect_gpus()
+    dev = addon.device_for(g[0] if g else None)
+    print(f"Installing the voice add-on ({dev}, about {addon.INSTALL_MB[dev] / 1000:.1f} GB) into {addon.root()}")
+    addon.install(g[0] if g else None, cancel=CancelToken(),
+                  on_log=(print if args.verbose else (lambda line: None)),
+                  on_step=lambda i, n, name: print(f"[{i}/{n}] {name}"))
+    print("done")
+    return 0
+
+
 def cmd_vsr_probe(args) -> int:
     ok, detail = gpu.probe_vsr()
     state = {True: "OK", False: "FAILED", None: "SKIPPED"}[ok]
@@ -262,6 +302,32 @@ def build_parser() -> argparse.ArgumentParser:
     sb.add_argument("--overwrite", action="store_true")
     sb.add_argument("-v", "--verbose", action="store_true")
     sb.set_defaults(func=cmd_subs)
+
+    from .features.dub.service import LEVELS as DUB_LEVELS
+
+    d = sub.add_parser("dub", help="translate the speech in videos: subtitles and a new voice")
+    d.add_argument("files", nargs="+")
+    d.add_argument("-t", "--to", default="ar", help="language to translate into, e.g. ar, en, fr (default ar)")
+    d.add_argument("--subtitles-only", action="store_true", help="only make translated subtitles, no new voice")
+    d.add_argument("--add-to-video", action="store_true",
+                   help="with --subtitles-only: also save a copy of the video with the subtitles inside")
+    d.add_argument("--level", choices=DUB_LEVELS, default="best",
+                   help="translator: best (Gemma 3 12B, default) or quick (Qwen3 8B)")
+    d.add_argument("--no-original", action="store_true", help="don't keep the original sound as a second track")
+    d.add_argument("-l", "--language", default="auto", help="spoken language if the video was never transcribed")
+    d.add_argument("--track", type=int, default=1, help="sound track number (1 = first)")
+    d.add_argument("--output-dir")
+    d.add_argument("-o", "--output", help=argparse.SUPPRESS)
+    d.add_argument("--gpu", type=int, default=0)
+    d.add_argument("--overwrite", action="store_true")
+    d.add_argument("--keep-temp", action="store_true", help="keep the work files (voices, lines) for checking")
+    d.add_argument("-v", "--verbose", action="store_true")
+    d.set_defaults(func=cmd_dub)
+
+    a = sub.add_parser("addon", help="install or remove the voice add-on (PyTorch, for dubbing)")
+    a.add_argument("action", choices=["status", "install", "remove"])
+    a.add_argument("-v", "--verbose", action="store_true")
+    a.set_defaults(func=cmd_addon)
     return p
 
 
