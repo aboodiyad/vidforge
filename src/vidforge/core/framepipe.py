@@ -8,10 +8,11 @@ its own matrix (BT.709 for HD, BT.601 for SD when untagged); the output is encod
 from __future__ import annotations
 
 import collections
+import queue
 import subprocess
 import threading
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 import numpy as np
 
@@ -171,3 +172,96 @@ class FrameWriter:
 
     def kill(self) -> None:
         self._pipe.kill()
+
+
+# --- running the three stages at once ---------------------------------------------------
+
+_END = object()
+
+
+class _Stage(threading.Thread):
+    def __init__(self, fn, name: str):
+        super().__init__(name=name, daemon=True)
+        self.fn = fn
+        self.error: BaseException | None = None
+
+    def run(self) -> None:
+        try:
+            self.fn()
+        except BaseException as e:  # reported by the main thread
+            self.error = e
+
+
+def _put(q: queue.Queue, item, cancel: CancelToken, failed: Callable[[], bool]) -> None:
+    while True:
+        if cancel.cancelled or failed():
+            raise Cancelled()
+        try:
+            q.put(item, timeout=0.2)
+            return
+        except queue.Full:
+            continue
+
+
+def _get(q: queue.Queue, cancel: CancelToken, failed: Callable[[], bool]):
+    while True:
+        if cancel.cancelled or failed():
+            raise Cancelled()
+        try:
+            return q.get(timeout=0.2)
+        except queue.Empty:
+            continue
+
+
+def run_frames(
+    reader: FrameReader,
+    writer: FrameWriter,
+    process: Callable[[np.ndarray], np.ndarray],
+    total: int | None,
+    on_progress: Callable[[float | None, str], None],
+    cancel: CancelToken,
+) -> None:
+    """Decode (thread), process (this thread), encode (thread), with small bounded queues.
+
+    The GPU work in *process* releases the GIL, so the three overlap. Cancelling or any stage
+    failing stops all three and kills both FFmpeg processes."""
+    q_in: queue.Queue = queue.Queue(maxsize=3)
+    q_out: queue.Queue = queue.Queue(maxsize=3)
+    stages: list[_Stage] = []
+    failed = lambda: any(st.error is not None for st in stages)  # noqa: E731
+
+    def read() -> None:
+        for frame in reader:
+            _put(q_in, frame, cancel, failed)
+        _put(q_in, _END, cancel, failed)
+
+    def write() -> None:
+        while (item := _get(q_out, cancel, failed)) is not _END:
+            writer.write(item)
+        writer.close()
+
+    stages += [_Stage(read, "decode"), _Stage(write, "encode")]
+    for st in stages:
+        st.start()
+    done = 0
+    try:
+        while (frame := _get(q_in, cancel, failed)) is not _END:
+            _put(q_out, process(frame), cancel, failed)
+            done += 1
+            frac = min(done / total, 0.999) if total else None
+            on_progress(frac, f"{done}/{total or '?'} frames")
+        _put(q_out, _END, cancel, failed)
+        stages[1].join()
+    except Cancelled:
+        pass
+    finally:
+        if cancel.cancelled or failed() or stages[1].is_alive():
+            reader.kill()
+            writer.kill()
+        for st in stages:
+            st.join(timeout=5)
+    if cancel.cancelled:
+        raise Cancelled()  # killed processes report errors too; cancellation wins
+    errors = [st.error for st in stages if st.error is not None and not isinstance(st.error, Cancelled)]
+    if errors:
+        raise errors[0]

@@ -6,6 +6,7 @@ from the worker thread; the GUI forwards them to the UI thread through a Qt sign
 
 from __future__ import annotations
 
+import collections
 import itertools
 import queue
 import threading
@@ -37,12 +38,41 @@ class Job:
     fn: Callable[["JobContext"], Any] = field(repr=False)
     state: JobState = JobState.QUEUED
     progress: float | None = None  # 0..1, None = indeterminate
-    message: str = ""
+    message: str = ""  # technical detail (English), for logs and tooltips
+    phase: str = ""  # short machine-readable step, e.g. "preparing", "downloading", "working"
     error: str | None = None
+    error_code: str | None = None  # set when the error has a known, translatable cause
+    error_params: dict = field(default_factory=dict)
     result: Any = None
     created: float = field(default_factory=time.time)
+    started: float | None = None  # time.monotonic() when it began running
+    finished: float | None = None
     cancel_token: CancelToken = field(default_factory=CancelToken, repr=False)
     log: list[str] = field(default_factory=list, repr=False)
+    # (monotonic time, progress) samples while working, for the time-remaining estimate.
+    _samples: collections.deque = field(default_factory=lambda: collections.deque(maxlen=400), repr=False)
+
+    def elapsed(self, now: float | None = None) -> float:
+        if self.started is None:
+            return 0.0
+        end = self.finished if self.finished is not None else (now or time.monotonic())
+        return max(0.0, end - self.started)
+
+    def eta(self, now: float | None = None, window: float = 30.0) -> float | None:
+        """Seconds left, from the progress rate over the last *window* seconds of work.
+        None until there is enough data to say anything honest."""
+        if self.state != JobState.RUNNING or not self._samples:
+            return None
+        now = now or time.monotonic()
+        t1, p1 = self._samples[-1]
+        if p1 >= 1.0:
+            return 0.0
+        old = [(t, p) for t, p in self._samples if now - t <= window] or [self._samples[0]]
+        t0, p0 = old[0]
+        if (t1 - t0) < 2.0 or (p1 - p0) <= 0.002:
+            return None
+        rate = (p1 - p0) / (t1 - t0)
+        return max(0.0, (1.0 - p1) / rate - (now - t1))
 
 
 class JobContext:
@@ -57,9 +87,13 @@ class JobContext:
     def cancel(self) -> CancelToken:
         return self._job.cancel_token
 
-    def report(self, progress: float | None = None, message: str | None = None) -> None:
+    def report(self, progress: float | None = None, message: str | None = None, phase: str | None = None) -> None:
+        if phase is not None and phase != self._job.phase:
+            self._job.phase = phase
+            self._job._samples.clear()  # a new step has its own pace
         if progress is not None:
             self._job.progress = max(0.0, min(1.0, progress))
+            self._job._samples.append((time.monotonic(), self._job.progress))
         if message is not None:
             self._job.message = message
         now = time.monotonic()
@@ -144,6 +178,7 @@ class JobQueue:
             if job.state != JobState.QUEUED:
                 continue  # cancelled while waiting
             job.state = JobState.RUNNING
+            job.started = time.monotonic()
             self._notify(job)
             ctx = JobContext(job, self._notify)
             try:
@@ -155,5 +190,8 @@ class JobQueue:
             except Exception as exc:
                 job.state = JobState.FAILED
                 job.error = str(exc) or exc.__class__.__name__
+                job.error_code = getattr(exc, "code", None)
+                job.error_params = dict(getattr(exc, "params", None) or {})
                 job.log.append(traceback.format_exc())
+            job.finished = time.monotonic()
             self._notify(job)

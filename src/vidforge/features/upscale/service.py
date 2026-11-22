@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ...core import gpu as gpu_mod
 from ...core import media, sizing, tools
+from ...core.errors import FriendlyError
 from ...core.files import remove_quietly
 from ...core.jobs import JobContext
 from ...core.process import Cancelled, ProcessError
-from . import nvencc_vsr, quality
+from . import estimate, nvencc_vsr, quality
 
 MODES = ("auto", "fast", "quality")
 CODECS = ("hevc", "h264", "av1")
@@ -47,9 +49,9 @@ def resolve_mode(mode: str, gpu: gpu_mod.GpuInfo | None) -> str:
     fast_ok = bool(gpu and gpu.vsr_capable) and tools.locate("nvencc")[0] is not None
     if mode == "fast":
         if not (gpu and gpu.vsr_capable):
-            raise ValueError("Fast mode needs an NVIDIA RTX GPU")
+            raise FriendlyError("fast_needs_rtx", "Fast mode needs an NVIDIA RTX GPU")
         if tools.locate("nvencc")[0] is None:
-            raise ValueError("Fast mode needs NVEncC (install it on the System page)")
+            raise FriendlyError("fast_needs_nvencc", "Fast mode needs NVEncC (install it on the System page)")
         return "fast"
     if mode == "quality":
         return "quality"
@@ -59,7 +61,7 @@ def resolve_mode(mode: str, gpu: gpu_mod.GpuInfo | None) -> str:
 def output_size(info: media.MediaInfo, size: str) -> tuple[int, int]:
     v = info.video
     if v is None or v.display_size is None:
-        raise ValueError("the source has no video stream")
+        raise FriendlyError("no_video", "the source has no video stream")
     if "x" in size.lower() and size.lower() not in sizing.FACTORS:
         return sizing.parse_custom(size)
     return sizing.target_size(*v.display_size, size)
@@ -83,15 +85,15 @@ def default_output(req: UpscaleRequest, mode: str, w: int, h: int) -> Path:
 def run_upscale(req: UpscaleRequest, ctx: JobContext) -> Path:
     src = req.input.resolve()
     if not src.is_file():
-        raise FileNotFoundError(src)
-    ctx.report(None, "reading source")
+        raise FriendlyError("file_missing", f"file not found: {src}", name=src.name)
+    ctx.report(None, "reading source", phase="preparing")
     info = media.probe(src)
     w, h = output_size(info, req.size)
     gpu = pick_gpu(req.gpu_index)
     mode = resolve_mode(req.mode, gpu)
     dst = req.output.resolve() if req.output else default_output(req, mode, w, h)
     if dst == src:
-        raise ValueError("the output file must differ from the input")
+        raise FriendlyError("same_file", "the output file must differ from the input")
     if dst.suffix.lower().lstrip(".") not in CONTAINERS:
         raise ValueError(f"output must be .{' or .'.join(CONTAINERS)}")
     if not req.overwrite:
@@ -101,7 +103,9 @@ def run_upscale(req: UpscaleRequest, ctx: JobContext) -> Path:
     ctx.log(f"{src.name}: {info.video.display_size} -> {w}x{h}, {mode} mode, output {dst}")
 
     def progress(frac, msg):
-        ctx.report(frac, f"{mode}: {msg}")
+        phase = ("downloading" if msg.startswith("downloading")
+                 else "preparing" if frac is None else "working")
+        ctx.report(frac, f"{mode}: {msg}", phase=phase)
 
     def do(m: str) -> None:
         if m == "fast":
@@ -119,6 +123,7 @@ def run_upscale(req: UpscaleRequest, ctx: JobContext) -> Path:
                 on_progress=progress, on_log=ctx.log, cancel=ctx.cancel,
             )
 
+    started = time.monotonic()
     try:
         try:
             do(mode)
@@ -129,14 +134,33 @@ def run_upscale(req: UpscaleRequest, ctx: JobContext) -> Path:
             ctx.log(f"Fast mode failed ({e.returncode}); retrying in Quality mode")
             remove_quietly(partial)
             mode = "quality"
+            started = time.monotonic()
             do(mode)
+        work = time.monotonic() - started
         partial.replace(dst)
     except BaseException:
         if not remove_quietly(partial):
             ctx.log(f"could not delete the unfinished file {partial}")
         raise
-    ctx.report(1.0, f"done: {dst.name}")
+    _learn(info, req, mode, w, h, dst, work)
+    ctx.report(1.0, f"done: {dst.name}", phase="done")
     return dst
+
+
+def _learn(info, req: UpscaleRequest, mode: str, w: int, h: int, dst: Path, work: float) -> None:
+    """Teach the estimator how fast this PC is and how big files really come out."""
+    try:
+        v = info.video
+        predicted, _ = estimate.video_bytes(info, w, h, mode, req.codec, req.quality, stats={})
+        actual = dst.stat().st_size - estimate.audio_bytes(info, req.container)
+        estimate.learn(
+            mode=mode, model=req.model, codec=req.codec, quality=req.quality,
+            frames=info.frame_count() or 0, in_pixels=(v.width or 0) * (v.height or 0), out_pixels=w * h,
+            work_seconds=work - estimate.STARTUP_S[mode],
+            predicted_video_bytes=int(predicted), actual_video_bytes=int(actual),
+        )
+    except Exception:
+        pass  # estimates are a convenience; never fail a finished job over them
 
 
 def _dml_device(gpu: gpu_mod.GpuInfo | None) -> int:

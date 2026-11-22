@@ -1,19 +1,25 @@
-"""Page shown for features that arrive in a later milestone."""
+"""Pages for parts that are coming soon: what they will do, in plain words."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
+
+from .. import theme
+from ..i18n import tr
+from ..widgets.common import Page, icon_label, label, panel
 
 
-class PlaceholderPage(QWidget):
-    def __init__(self, title: str, milestone: str, summary: str, parent: QWidget | None = None):
-        super().__init__(parent)
-        layout = QVBoxLayout(self)
-        head = QLabel(f"<h2>{title}</h2>")
-        body = QLabel(f"{summary}<br><br><i>Arrives in milestone {milestone}.</i>")
-        body.setWordWrap(True)
-        for w in (head, body):
-            w.setTextFormat(Qt.TextFormat.RichText)
-            layout.addWidget(w)
-        layout.addStretch(1)
+class ComingSoonPage(Page):
+    def __init__(self, key: str, icon_name: str, parent=None):
+        super().__init__(tr(f"{key}.title"), tr(f"{key}.desc"), parent)
+        box, lay = panel(QHBoxLayout, margins=(20, 18, 20, 18), spacing=14)
+        lay.addWidget(icon_label(icon_name, 28, theme.ACCENT), 0, Qt.AlignmentFlag.AlignTop)
+        texts = QVBoxLayout()
+        texts.setSpacing(4)
+        texts.addWidget(label(tr("soon.badge"), "Strong"))
+        texts.addWidget(label(tr("soon.note"), "Body", wrap=True))
+        lay.addLayout(texts, 1)
+        box.setMaximumWidth(640)
+        self.add(box)
+        self.finish()

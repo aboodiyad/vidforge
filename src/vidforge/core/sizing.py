@@ -6,6 +6,8 @@ always use square pixels with even dimensions.
 
 from __future__ import annotations
 
+from .errors import FriendlyError
+
 # Landscape bounding boxes; for portrait video the box is turned around.
 BOXES = {
     "1080p": (1920, 1080),
@@ -20,8 +22,9 @@ LABELS = {
 }
 
 
-class SizeError(ValueError):
-    pass
+class SizeError(FriendlyError):
+    def __init__(self, message: str, code: str = "bad_size", **params):
+        super().__init__(code, message, **params)
 
 
 def _even(v: float) -> int:
@@ -30,7 +33,7 @@ def _even(v: float) -> int:
 
 def target_size(display_w: int, display_h: int, preset: str) -> tuple[int, int]:
     if display_w <= 0 or display_h <= 0:
-        raise SizeError("source has no valid size")
+        raise SizeError("source has no valid size", "no_video")
     if preset in FACTORS:
         f = FACTORS[preset]
     elif preset in BOXES:
@@ -42,7 +45,8 @@ def target_size(display_w: int, display_h: int, preset: str) -> tuple[int, int]:
         raise SizeError(f"unknown size preset {preset!r}; choose from {', '.join(PRESETS)}")
     w, h = _even(display_w * f), _even(display_h * f)
     if w <= display_w and h <= display_h:
-        raise SizeError(f"the source ({display_w}x{display_h}) is already at or above {LABELS[preset]}")
+        raise SizeError(f"the source ({display_w}x{display_h}) is already at or above {LABELS[preset]}",
+                        "already_big", width=display_w, height=display_h, preset=preset)
     return w, h
 
 

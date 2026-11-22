@@ -7,8 +7,14 @@ A Windows app for making videos look better, built from open-source parts.
   - **Fast mode**: NVIDIA RTX Video Super Resolution (needs an RTX 20-series or newer card).
   - **Quality mode**: Real-ESRGAN AI upscaling on any GPU (NVIDIA, AMD or Intel). Slower, more detail.
   - Keeps audio tracks, subtitles and chapters.
+  - Shows the new size, the file size and how long it will take **before** you start, and the
+    time left while it works. The guesses get better with every video you finish.
+- **Fix faces** in videos: finds every face, follows it from frame to frame, and makes it clear and
+  sharp with GFPGAN (natural) or CodeFormer (strong repair, free for personal use only). It can
+  make the video bigger at the same time.
+- **English and Arabic** (right-to-left). Change it in **Settings**.
 
-**Coming next**: face enhancement, subtitle generation, translation and dubbing.
+**Coming next**: subtitle generation, translation and dubbing.
 
 ## Try it
 
@@ -38,11 +44,17 @@ Later, just double-click **`Start VidForge.bat`** again.
 ```powershell
 .venv\Scripts\vidforge upscale my_video.mp4 --size 2160p --mode auto
 .venv\Scripts\vidforge upscale --help
+.venv\Scripts\vidforge faces my_video.mp4 --model gfpgan --size keep
+.venv\Scripts\vidforge faces --help
 ```
 
 ## Credits
 - [NVEncC](https://github.com/rigaya/NVEnc) by rigaya (MIT), using NVIDIA RTX Video Super Resolution
 - [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) models by Xintao Wang et al. (BSD-3-Clause)
+- [GFPGAN](https://github.com/TencentARC/GFPGAN) (Apache-2.0) and [CodeFormer](https://github.com/sczhou/CodeFormer)
+  (S-Lab License 1.0, non-commercial) face models, [YuNet](https://github.com/opencv/opencv_zoo) face detector (MIT),
+  as ONNX files from [FaceFusion's model releases](https://github.com/facefusion/facefusion-assets)
+- [OpenCV](https://opencv.org) (Apache-2.0); interface font IBM Plex Sans Arabic (SIL Open Font License)
 - [FFmpeg](https://ffmpeg.org) (GPL build from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds))
 - [ONNX Runtime](https://onnxruntime.ai) with DirectML, [Qt for Python (PySide6)](https://doc.qt.io/qtforpython/)
 

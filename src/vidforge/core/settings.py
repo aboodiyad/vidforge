@@ -12,6 +12,7 @@ from . import paths
 @dataclass
 class Settings:
     # "auto" picks fast (RTX VSR) when available, else quality; or force "fast" / "quality".
+    language: str = "system"  # system / en / ar
     upscale_mode: str = "auto"
     upscale_size: str = "2160p"
     upscale_model: str = "general"
@@ -19,6 +20,11 @@ class Settings:
     upscale_codec: str = "hevc"
     upscale_quality: str = "balanced"
     upscale_container: str = "mp4"
+    face_model: str = "gfpgan"
+    face_strength: float = 1.0
+    face_fidelity: float = 0.7
+    face_size: str = "keep"
+    face_background: str = "auto"
     gpu_index: int = 0
     output_dir: str = ""
     keep_temp_files: bool = False

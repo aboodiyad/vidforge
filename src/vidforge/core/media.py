@@ -19,6 +19,7 @@ class StreamInfo:
     language: str | None = None
     title: str | None = None
     default: bool = False
+    bit_rate: int | None = None  # bits/s when the container reports it
     # video
     width: int | None = None
     height: int | None = None
@@ -160,6 +161,7 @@ def parse_ffprobe(data: dict, path: str = "") -> MediaInfo:
                 language=tags.get("language"),
                 title=tags.get("title"),
                 default=bool(disp.get("default")),
+                bit_rate=_int(s.get("bit_rate")) or _int(tags.get("bps")),
                 width=_int(s.get("width")),
                 height=_int(s.get("height")),
                 fps=_rate(rate),

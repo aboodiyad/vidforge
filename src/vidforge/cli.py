@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import json
 import sys
 from dataclasses import asdict
@@ -89,11 +90,9 @@ def cmd_tools(args) -> int:
     return 0
 
 
-def cmd_upscale(args) -> int:
-    from pathlib import Path
-
+def _run_jobs(args, make_job) -> int:
+    """Run one job per input file in order, with a live progress line and time left."""
     from .core.jobs import JobQueue, JobState
-    from .features.upscale.service import UpscaleRequest, run_upscale
 
     queue = JobQueue()
     width = 0
@@ -101,22 +100,16 @@ def cmd_upscale(args) -> int:
     def show(job) -> None:
         nonlocal width
         pct = f"{job.progress * 100:5.1f}%" if job.progress is not None else "  ...  "
-        line = f"\r[{pct}] {job.title}: {job.message}"
+        eta = job.eta()
+        left = f", {int(eta) // 60}:{int(eta) % 60:02d} left" if eta is not None else ""
+        line = f"\r[{pct}] {job.title}: {job.message}{left}"
         print(line.ljust(width), end="", flush=True)
         width = len(line)
 
     queue.add_listener(show)
     failed = False
     for f in args.files:
-        req = UpscaleRequest(
-            input=Path(f),
-            output=Path(args.output) if args.output and len(args.files) == 1 else None,
-            output_dir=Path(args.output_dir) if args.output_dir else None,
-            size=args.size, mode=args.mode, codec=args.codec, quality=args.quality,
-            container=args.container, vsr_quality=args.vsr_quality, model=args.model,
-            gpu_index=args.gpu, overwrite=args.overwrite,
-        )
-        job = queue.submit(Path(f).name, lambda ctx, r=req: run_upscale(r, ctx))
+        job = queue.submit(Path(f).name, make_job(Path(f)))
         try:
             queue.wait(job)
         except KeyboardInterrupt:
@@ -124,7 +117,7 @@ def cmd_upscale(args) -> int:
             queue.wait(job, 30)
         print()
         if job.state == JobState.DONE:
-            print(f"  -> {job.result}")
+            print(f"  -> {job.result}  ({job.elapsed():.0f}s)")
         else:
             failed = True
             print(f"  {job.state.value}: {job.error or ''}")
@@ -132,6 +125,44 @@ def cmd_upscale(args) -> int:
                 print("\n".join(job.log[-30:]))
     queue.shutdown()
     return 1 if failed else 0
+
+
+def _out(args):
+    single = args.output and len(args.files) == 1
+    return (Path(args.output) if single else None), (Path(args.output_dir) if args.output_dir else None)
+
+
+def cmd_upscale(args) -> int:
+    from .features.upscale.service import UpscaleRequest, run_upscale
+
+    output, output_dir = _out(args)
+
+    def make(path: Path):
+        req = UpscaleRequest(
+            input=path, output=output, output_dir=output_dir, size=args.size, mode=args.mode,
+            codec=args.codec, quality=args.quality, container=args.container,
+            vsr_quality=args.vsr_quality, model=args.model, gpu_index=args.gpu, overwrite=args.overwrite,
+        )
+        return lambda ctx: run_upscale(req, ctx)
+
+    return _run_jobs(args, make)
+
+
+def cmd_faces(args) -> int:
+    from .features.face.service import FaceRequest, run_faces
+
+    output, output_dir = _out(args)
+
+    def make(path: Path):
+        req = FaceRequest(
+            input=path, output=output, output_dir=output_dir, size=args.size, background=args.background,
+            model=args.model, strength=args.strength, fidelity=args.fidelity, esrgan_model=args.ai_style,
+            codec=args.codec, quality=args.quality, container=args.container, gpu_index=args.gpu,
+            overwrite=args.overwrite,
+        )
+        return lambda ctx: run_faces(req, ctx)
+
+    return _run_jobs(args, make)
 
 
 def cmd_vsr_probe(args) -> int:
@@ -181,6 +212,26 @@ def build_parser() -> argparse.ArgumentParser:
     u.add_argument("--overwrite", action="store_true")
     u.add_argument("-v", "--verbose", action="store_true")
     u.set_defaults(func=cmd_upscale)
+
+    fx = sub.add_parser("faces", help="fix blurry faces (GFPGAN or CodeFormer), optionally upscaling too")
+    fx.add_argument("files", nargs="+")
+    fx.add_argument("--model", choices=["gfpgan", "codeformer"], default="gfpgan",
+                    help="gfpgan = natural (default), codeformer = strong repair (non-commercial licence)")
+    fx.add_argument("--strength", type=float, default=1.0, help="0.3-1.0: how much faces change")
+    fx.add_argument("--fidelity", type=float, default=0.7, help="CodeFormer only: 0 = repair more, 1 = keep face")
+    fx.add_argument("-s", "--size", default="keep", help=f"keep (default), {', '.join(sizing.PRESETS)} or WxH")
+    fx.add_argument("-b", "--background", choices=["auto", "fast", "quality"], default="auto",
+                    help="how to upscale when --size is not keep")
+    fx.add_argument("--ai-style", choices=list(QUALITY_MODELS), default="general", help="Best-quality background model")
+    fx.add_argument("-c", "--codec", choices=CODECS, default="hevc")
+    fx.add_argument("-q", "--quality", choices=["high", "balanced", "small"], default="balanced")
+    fx.add_argument("--container", choices=CONTAINERS, default="mp4")
+    fx.add_argument("-o", "--output", help="output file (single input only)")
+    fx.add_argument("--output-dir")
+    fx.add_argument("--gpu", type=int, default=0)
+    fx.add_argument("--overwrite", action="store_true")
+    fx.add_argument("-v", "--verbose", action="store_true")
+    fx.set_defaults(func=cmd_faces)
     return p
 
 
