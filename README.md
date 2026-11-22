@@ -27,22 +27,35 @@ A Windows app for making videos look better, built from open-source parts.
   The voice needs a one-time **voice add-on** (about 5.5 GB with an NVIDIA card), offered on that page.
 - **English and Arabic** (right-to-left). Change it in **Settings**.
 
-## Try it
+## Download and install
 
-You need **Windows 10 or 11** and an internet connection for the first start.
+You need **Windows 10 or 11 (64-bit)** and an internet connection for the first start.
 
-1. On this page, click the green **Code** button, then **Download ZIP**.
-2. Right-click the downloaded ZIP, choose **Extract All…**, and extract it to a normal folder
-   (for example your Desktop). Don't run it from inside the ZIP.
-3. Open the extracted folder and double-click **`Start VidForge.bat`**.
-   - If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**.
-   - The first start installs everything into that folder (Python packages about 1 GB,
-     FFmpeg and NVEncC about 500 MB). It takes a few minutes. If Python 3.12 is missing,
-     it offers to install it.
-4. When the VidForge window opens: go to **Upscale**, add a video, pick a size, click **Upscale**.
-   Progress shows in the **Jobs** panel at the bottom. The result is saved next to the video.
+1. Go to the [**Releases** page](https://github.com/aboodiyad/vidforge/releases/latest) and download
+   **`VidForge-Setup-<version>.exe`** (about 140 MB).
+2. Double-click it. If Windows shows "Windows protected your PC", click **More info**, then
+   **Run anyway** (VidForge is free and not paid-signed, so Windows doesn't know it yet).
+   No administrator rights are needed; it installs for you only.
+3. Start **VidForge** from the Start menu (or the desktop icon). The first time, it downloads the
+   free programs it needs (FFmpeg, and NVEncC on RTX cards: about 500 MB) and then opens.
+4. Pick a page on the left (Make bigger, Fix faces, Write the words, Translate & dub), add a video,
+   and press **Start**. Progress shows in **Your list** at the bottom. Results are saved next to
+   the video; your original is never changed.
 
-Later, just double-click **`Start VidForge.bat`** again.
+AI models download the first time each part needs them, and are kept in the `vidforge-data`
+folder inside the install folder. To remove VidForge, use **Settings > Apps** in Windows; it asks
+whether to delete those downloads too.
+
+### Run from the source code (for developers)
+
+Download the code (green **Code** button > **Download ZIP**, then extract it) and double-click
+**`Start VidForge.bat`**. The first start creates a Python environment in that folder (needs
+Python 3.12; it offers to install it). To build the installer yourself:
+
+```powershell
+winget install JRSoftware.InnoSetup
+.venv\Scripts\python packaging\build.py
+```
 
 ### Tips
 - **Auto** mode picks Fast on RTX cards and Quality on everything else.

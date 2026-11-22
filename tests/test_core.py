@@ -272,3 +272,26 @@ def test_parse_nvidia_smi_and_rtx_rules():
     assert g[0].compute_cap == (7, 5) and g[0].vsr_capable
     assert not g[1].vsr_capable  # Turing without Tensor cores
     assert not g[2].vsr_capable
+
+
+def test_first_run_and_ensure_fetch_only_what_is_missing(monkeypatch, tmp_path):
+    from vidforge.core import tools
+
+    present = {"ffmpeg"}
+    monkeypatch.setattr(tools, "locate", lambda key: (tmp_path / key, "managed") if key in present else (None, "missing"))
+    fetched = []
+    monkeypatch.setattr(tools, "fetch", lambda key, **kw: fetched.append(key) or tmp_path / f"{key}.exe")
+    assert tools.first_run_keys(True) == ["nvencc"]
+    assert tools.first_run_keys(False) == []
+    assert tools.ensure("ffmpeg") == tmp_path / "ffmpeg" and fetched == []
+    assert tools.ensure("whisper") == tmp_path / "whisper.exe" and fetched == ["whisper"]
+
+
+def test_app_icon_is_packaged():
+    from pathlib import Path
+
+    import vidforge
+
+    assets = Path(vidforge.__file__).parent / "gui" / "assets"
+    data = (assets / "vidforge.ico").read_bytes()
+    assert data[:4] == b"\x00\x00\x01\x00" and int.from_bytes(data[4:6], "little") >= 5  # an .ico with sizes

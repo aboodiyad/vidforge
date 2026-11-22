@@ -155,7 +155,10 @@ def transcribe(wav: Path, out_base: Path, *, gpu: GpuInfo | None, model: Path, v
                on_progress: Callable[[float | None, str], None], on_log: Callable[[str], None]) -> Transcript:
     import os
 
-    exe = tools.exe_path(whisper_tool(gpu))
+    def dl(done: int, total: int | None) -> None:
+        on_progress(None, f"downloading the speech program {done / 1e6:.0f}/{(total or 0) / 1e6:.0f} MB")
+
+    exe = tools.ensure(whisper_tool(gpu), progress=dl, cancel=cancel)
     threads = max(2, min(8, (os.cpu_count() or 4) - 1))
     speech = None
     if vad_model is not None:

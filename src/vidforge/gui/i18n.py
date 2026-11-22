@@ -155,6 +155,22 @@ S: dict[str, tuple[str, str]] = {
     "err.hdr_burn": ("Subtitles can't be written onto HDR video yet. Untick “Write them onto the picture”.", "لا يمكن كتابة الترجمة على فيديو HDR بعد. أزل علامة «اكتبها على الصورة»."),
     "err.generic": ("something went wrong. Open Details to see why.", "حدث خطأ ما. افتح «التفاصيل» لمعرفة السبب."),
 
+    # --- first start ---
+    "first.title": ("Getting VidForge ready", "تجهيز VidForge"),
+    "first.desc": (
+        "The first time, VidForge downloads the free programs it needs to open and save videos. This happens only once.",
+        "في المرة الأولى، ينزّل VidForge البرامج المجانية التي يحتاجها لفتح الفيديوهات وحفظها. يحدث هذا مرة واحدة فقط.",
+    ),
+    "first.checking": ("Checking your PC…", "جارٍ فحص جهازك…"),
+    "first.getting": ("Downloading {name}: {done} of {total}", "جارٍ تنزيل {name} — {done} من {total}"),
+    "first.getting_plain": ("Downloading {name}…", "جارٍ تنزيل {name}…"),
+    "first.failed": (
+        "The download didn't work. Check that the internet is on, then try again.",
+        "لم ينجح التنزيل. تأكد من اتصال الإنترنت، ثم حاول مرة أخرى.",
+    ),
+    "first.retry": ("Try again", "حاول مرة أخرى"),
+    "first.quit": ("Close", "إغلاق"),
+
     # --- settings ---
     "set.title": ("Settings", "الإعدادات"),
     "set.subtitle": ("Change how VidForge looks and works.", "غيّر شكل VidForge وطريقة عمله."),

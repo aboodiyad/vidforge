@@ -240,6 +240,22 @@ def resolve(key: str) -> list[ReleaseAsset]:
     raise LookupError(f"no recent {src.repo} release has an asset matching {src.asset_pattern!r}")
 
 
+def ensure(key: str, *, progress: Callable[[int, int | None], None] | None = None,
+           cancel: CancelToken | None = None) -> Path:
+    """The tool's executable, downloading it first if it isn't installed."""
+    path, _ = locate(key)
+    return path if path is not None else fetch(key, progress=progress, cancel=cancel)
+
+
+def first_run_keys(gpu_vsr_capable: bool) -> list[str]:
+    """Tools a fresh install gets before the window opens: FFmpeg opens every video; NVEncC makes
+    Fast upscaling work on RTX cards. Others (whisper.cpp, llama.cpp) come when first needed."""
+    keys = ["ffmpeg"]
+    if gpu_vsr_capable:
+        keys.append("nvencc")
+    return [k for k in keys if locate(k)[0] is None]
+
+
 def fetch(
     key: str,
     *,

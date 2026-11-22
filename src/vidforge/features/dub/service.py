@@ -228,8 +228,7 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
     ctx.log(f"{src_lang} -> {req.target}: {len(cues)} subtitles in {len(lines)} lines")
 
     # 2. translate
-    if tools.locate("llama")[0] is None:
-        tools.fetch("llama", progress=_downloader(spans, "translator program"), cancel=ctx.cancel)
+    tools.ensure("llama", progress=_downloader(spans, "translator program"), cancel=ctx.cancel)
     model = models.ensure_llm(req.level, progress=_downloader(spans, "translator"), cancel=ctx.cancel)
     rate = tl.cps(req.target, estimate.learned_cps(stats, req.voice))
     spans.report("translate", 0.0, "starting the translator")

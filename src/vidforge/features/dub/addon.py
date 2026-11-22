@@ -66,8 +66,13 @@ def requirements_file() -> Path:
 
 
 def base_python() -> str:
-    """The Python that VidForge's own environment was made from (a venv cannot copy a venv)."""
-    return getattr(sys, "_base_executable", None) or sys.executable
+    """The Python that VidForge's own environment was made from (a venv cannot copy a venv).
+    The installed app runs windowless (pythonw.exe); the console python.exe next to it is used, so
+    pip's output can be read."""
+    exe = Path(getattr(sys, "_base_executable", None) or sys.executable)
+    if exe.name.lower() == "pythonw.exe" and exe.with_name("python.exe").is_file():
+        exe = exe.with_name("python.exe")
+    return str(exe)
 
 
 def install(gpu: GpuInfo | None, *, cancel: CancelToken, on_log: Callable[[str], None],

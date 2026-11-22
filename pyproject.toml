@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Local video upscaling, face enhancement, subtitles and dubbing for Windows"
 requires-python = ">=3.11"
 dependencies = [
-    "PySide6>=6.7",
+    "PySide6-Essentials>=6.7",      # Qt Core/Gui/Widgets/Svg only (no add-on modules: half the size)
     "numpy>=2",
     "onnx>=1.17",                   # builds Real-ESRGAN graphs from the official weights
     "onnxruntime-directml>=1.24",   # runs them on any DirectX 12 GPU
@@ -32,5 +32,5 @@ where = ["src"]
 testpaths = ["tests"]
 
 [tool.setuptools.package-data]
-"vidforge.gui" = ["assets/fonts/*.ttf", "assets/fonts/*.txt"]
+"vidforge.gui" = ["assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/*.ico", "assets/*.png"]
 "vidforge.features.dub" = ["requirements-voice.txt"]
