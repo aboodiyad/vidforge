@@ -30,12 +30,14 @@ class Settings:
     subs_level: str = "balanced"
     subs_add_to_video: bool = False
     subs_audio_track: int = 0
+    subs_burn_in: bool = False  # write the subtitles onto the picture of a copy
     dub_target: str = "ar"
     dub_voice: bool = True  # False = translated subtitles only
     dub_level: str = "best"
     dub_engine: str = "chatterbox"  # the voice: chatterbox or xtts
     dub_add_to_video: bool = True  # subtitles only: also a copy of the video with them inside
     dub_keep_original: bool = True
+    dub_burn_in: bool = False
     dub_language: str = "auto"
     dub_audio_track: int = 0
     gpu_index: int = 0

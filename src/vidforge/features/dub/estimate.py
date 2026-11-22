@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ...core import tools
 from ...core.gpu import GpuInfo
+from ..subtitles import burn
 from ..subtitles import estimate as sub_est
 from ..upscale import estimate as up
 from . import addon, models
@@ -43,7 +44,8 @@ def learned_cps(stats: dict, voice: str = "chatterbox") -> dict:
 
 
 def estimate(info, *, level: str, dub: bool, add_to_video: bool, target: str, gpu: GpuInfo | None,
-             transcript=None, stats: dict | None = None, voice: str = "chatterbox") -> up.Estimate:
+             transcript=None, stats: dict | None = None, voice: str = "chatterbox",
+             burn_in: bool = False) -> up.Estimate:
     stats = up.load_stats() if stats is None else stats
     dev = device(gpu)
     dur = info.duration or 0.0
@@ -69,14 +71,16 @@ def estimate(info, *, level: str, dub: bool, add_to_video: bool, target: str, gp
         secs += spoken / v
         learned_any |= ln
         secs += dur / 150 + 5  # fitting, mixing and saving
-    elif add_to_video:
+    elif add_to_video and not burn_in:
         secs += dur / 400 + 2
+    if burn_in:
+        secs += burn.seconds(info, gpu, stats)
 
     lo, hi = (0.75, 1.35) if learned_any else (0.5, 2.0)
     size = dur * 15.0  # the .srt
-    if (dub or add_to_video) and info.path:
+    if (dub or add_to_video or burn_in) and info.path:
         p = Path(info.path)
-        size += p.stat().st_size if p.is_file() else 0
+        size += (p.stat().st_size if p.is_file() else 0) * (1.2 if burn_in else 1.0)  # burned: encoded again
         if dub:
             size += dur * AUDIO_BITRATE / 8
     download = models.download_mb(level, voice=voice if dub else None)

@@ -31,9 +31,15 @@ def seconds(audio_seconds: float, level: str, gpu: GpuInfo | None, stats: dict |
     return STARTUP_S + audio_seconds / speed + audio_seconds / 400, bool(learned)  # + audio extraction
 
 
-def estimate(info, *, level: str, gpu: GpuInfo | None, add_to_video: bool, stats: dict | None = None) -> up.Estimate:
+def estimate(info, *, level: str, gpu: GpuInfo | None, add_to_video: bool, stats: dict | None = None,
+             burn_in: bool = False) -> up.Estimate:
+    from . import burn
+
     dur = info.duration or 0.0
     secs, learned = seconds(dur, level, gpu, stats)
+    if burn_in:
+        secs += burn.seconds(info, gpu, stats)
+        add_to_video = True
     lo, hi = (0.8, 1.3) if learned else (0.6, 1.8)
     srt_bytes = dur * 15  # roughly 15 bytes of subtitle text per second of speech
     size = srt_bytes
@@ -41,7 +47,7 @@ def estimate(info, *, level: str, gpu: GpuInfo | None, add_to_video: bool, stats
         from pathlib import Path
 
         p = Path(info.path)
-        size += p.stat().st_size if p.is_file() else 0
+        size += (p.stat().st_size if p.is_file() else 0) * (1.2 if burn_in else 1.0)  # encoded again
     # width/height 0: the picture does not change, so the list shows no "new size".
     return up.Estimate(width=0, height=0, mode="subtitles", seconds=secs, seconds_low=secs * lo,
                        seconds_high=secs * hi, bytes=int(size), bytes_low=int(size * 0.9),

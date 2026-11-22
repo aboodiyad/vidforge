@@ -29,6 +29,8 @@ from ...core.process import run_process
 from ...core.streams import plan_audio, plan_subtitles
 from ..subtitles import srt
 from ..subtitles.segment import Rules, cues_from_words
+from ..subtitles import burn
+from ..subtitles.burn import Burn
 from ..subtitles.service import ISO3, load_transcript, mux_subtitles, transcribe_video
 from ..upscale import estimate as up_est
 from ..upscale.service import pick_gpu, unique_path
@@ -45,6 +47,7 @@ class DubRequest:
     target: str = "ar"  # language to translate into (ISO 639-1)
     dub: bool = True  # False = translated subtitles only
     add_to_video: bool = False  # subtitles only: also save a copy of the video with them inside
+    burn_in: bool = False  # write the subtitles onto the picture of the new copy (always shown)
     level: str = "best"  # translator: best (Gemma 3 12B) or quick (Qwen3 8B)
     keep_original: bool = True  # dub: keep the original sound as a second track
     language: str = "auto"  # spoken language, used only if the video has no transcript yet
@@ -127,11 +130,15 @@ def run_worker(job: dict, work: Path, *, ctx: JobContext, on_stage: Callable[[st
 # --- mux ----------------------------------------------------------------------------------------
 
 def mux_dub(src: Path, info: MediaInfo, dub_wav: Path, srt_path: Path, dst: Path, *, target: str,
-            keep_original: bool, cancel, on_progress) -> None:
+            keep_original: bool, cancel, on_progress, burn_in: Burn | None = None, work: Path | None = None) -> None:
+    """The dubbed copy. With *burn_in* the translated subtitles are written onto the picture (and
+    not added as a track too, which players might show on top of them)."""
+    src, dub_wav, srt_path, dst = (Path(x).resolve() for x in (src, dub_wav, srt_path, dst))  # FFmpeg may run elsewhere
     container = "mp4" if dst.suffix.lower() in MP4_EXT else "mkv"
     lang3 = ISO3.get(target, "und")
     name = tl.language_name(target)
-    args: list = ["-i", src, "-i", dub_wav, "-i", srt_path, "-map", "0:v", "-map", "1:a"]
+    video = ["-map", f"0:{info.video.index}"] if burn_in and info.video else ["-map", "0:v"]
+    args: list = ["-i", src, "-i", dub_wav, *([] if burn_in else ["-i", srt_path]), *video, "-map", "1:a"]
     originals = plan_audio(info, container) if keep_original else []
     for p in originals:
         args += ["-map", f"0:{p.stream.index}"]
@@ -140,7 +147,9 @@ def mux_dub(src: Path, info: MediaInfo, dub_wav: Path, srt_path: Path, dst: Path
         args += ["-map", f"0:{p.stream.index}"]
     if container == "mkv":
         args += ["-map", "0:t?"]
-    args += ["-map", "2:0", "-c", "copy",
+    if not burn_in:
+        args += ["-map", "2:0"]
+    args += ["-c", "copy", *(burn_in.args() if burn_in else []),
              "-c:a:0", "aac", "-b:a:0", "192k", "-ar:a:0", "48000", "-filter:a:0", "alimiter=limit=0.95:level=0",
              "-metadata:s:a:0", f"language={lang3}", "-metadata:s:a:0", f"title={name} (dub)",
              "-disposition:a:0", "default"]
@@ -155,12 +164,18 @@ def mux_dub(src: Path, info: MediaInfo, dub_wav: Path, srt_path: Path, dst: Path
             args += [f"-c:s:{i}", p.codec]
         args += [f"-disposition:s:{i}", "0"]
     n = len(subs)
-    args += [f"-c:s:{n}", "mov_text" if container == "mp4" else "srt", f"-metadata:s:s:{n}", f"language={lang3}",
-             f"-metadata:s:s:{n}", f"title={name}", f"-disposition:s:{n}", "0"]
+    if not burn_in:
+        args += [f"-c:s:{n}", "mov_text" if container == "mp4" else "srt", f"-metadata:s:s:{n}",
+                 f"language={lang3}", f"-metadata:s:s:{n}", f"title={name}", f"-disposition:s:{n}", "0"]
     if container == "mp4":
         args += ["-movflags", "+faststart"]
     args.append(dst)
-    run_ffmpeg(args, duration=info.duration, on_progress=on_progress, cancel=cancel)
+    cwd = burn_in.prepare(work or paths.temp_dir() / f"burn-{uuid.uuid4().hex[:12]}") if burn_in else None
+    try:
+        run_ffmpeg(args, duration=info.duration, on_progress=on_progress, cancel=cancel, cwd=cwd)
+    finally:
+        if cwd is not None and work is None:
+            shutil.rmtree(cwd, ignore_errors=True)
 
 
 # --- the job ------------------------------------------------------------------------------------
@@ -174,6 +189,8 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
     info = media.probe(src)
     if not info.audio:
         raise FriendlyError("no_audio", "this video has no sound")
+    if req.burn_in:
+        burn.check(info)  # before the long steps
     gpu = pick_gpu(req.gpu_index)
     dev = estimate.device(gpu)
     stats = up_est.load_stats()
@@ -190,7 +207,7 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
     if req.dub:
         weights.update(separate=estimate.WORKER_STARTUP + dur / estimate.SEPARATE_SPEED[dev],
                        voice=spoken_guess / estimate.TTS_SPEED[(req.voice, dev)], fit=3 + dur / 100)
-    weights["save"] = 1 + dur / 150
+    weights["save"] = 1 + dur / 150 + (burn.seconds(info, gpu, stats) if req.burn_in else 0.0)
     spans = Spans(ctx, weights)
 
     # 1. what is said
@@ -244,12 +261,17 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
     if not req.dub:
         srt.write(tl.spread(lines, cues, req.target), srt_path)
         result = srt_path
-        if req.add_to_video:
+        if req.add_to_video or req.burn_in:
             partial = dst.with_name(f"{dst.stem}.partial{dst.suffix}")
             try:
-                mux_subtitles(src, info, srt_path, partial, ISO3.get(req.target, "und"), cancel=ctx.cancel,
-                              on_progress=lambda f, s: spans.report("save", f, "adding subtitles"))
+                b = burn.make(info, srt_path, req.target, gpu) if req.burn_in else None
+                t0 = time.monotonic()
+                mux_subtitles(src, info, srt_path, partial, ISO3.get(req.target, "und"), cancel=ctx.cancel, burn=b,
+                              on_progress=lambda f, s: spans.report(
+                                  "save", f, "writing subtitles onto the picture" if b else "adding subtitles"))
                 partial.replace(dst)
+                if b:
+                    burn.learn(info, b, time.monotonic() - t0)
             except BaseException:
                 remove_quietly(partial)
                 raise
@@ -264,7 +286,7 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
     work.mkdir(parents=True, exist_ok=True)
     try:
         result = _dub_audio_and_save(req, ctx, spans, src, info, work, lines, cues, model, voice_files,
-                                     rate, dev, srt_path, dst)
+                                     rate, dev, srt_path, dst, gpu)
     finally:
         if not req.keep_temp:
             shutil.rmtree(work, ignore_errors=True)
@@ -277,7 +299,7 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
 
 def _dub_audio_and_save(req: DubRequest, ctx: JobContext, spans: Spans, src: Path, info: MediaInfo, work: Path,
                         lines: list[tl.Line], cues, model: Path, voice_files: dict[str, Path], rate: float,
-                        dev: str, srt_path: Path, dst: Path) -> Path:
+                        dev: str, srt_path: Path, dst: Path, gpu) -> Path:
     dur = info.duration or 0.0
     track = req.audio_track if 0 <= req.audio_track < len(info.audio) else 0
     mix_wav = work / "mix.wav"
@@ -389,9 +411,15 @@ def _dub_audio_and_save(req: DubRequest, ctx: JobContext, spans: Spans, src: Pat
     srt.write(tl.spread(lines, cues, req.target), srt_path)
     partial = dst.with_name(f"{dst.stem}.partial{dst.suffix}")
     try:
+        b = burn.make(info, srt_path, req.target, gpu) if req.burn_in else None
+        t0 = time.monotonic()
         mux_dub(src, info, dub_wav, srt_path, partial, target=req.target, keep_original=req.keep_original,
-                cancel=ctx.cancel, on_progress=lambda f, s: spans.report("save", f, "saving the video"))
+                cancel=ctx.cancel, burn_in=b, work=work / "burn",
+                on_progress=lambda f, s: spans.report(
+                    "save", f, "writing subtitles onto the picture" if b else "saving the video"))
         partial.replace(dst)
+        if b:
+            burn.learn(info, b, time.monotonic() - t0)
     except BaseException:
         remove_quietly(partial)
         raise

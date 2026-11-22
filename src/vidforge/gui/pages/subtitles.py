@@ -86,7 +86,13 @@ class SubtitlesPage(QWidget):
         self.inside.toggled.connect(self._changed)
         self.page.body.addWidget(self.inside)
         self.page.body.addSpacing(4)
-        self.page.add(label(tr("sb.inside.help"), "Hint", wrap=True))
+        self.page.add(label(tr("sb.inside.help"), "Hint", wrap=True), spacing_after=12)
+        self.burn = QCheckBox(tr("burn.check"))
+        self.burn.setChecked(settings.subs_burn_in)
+        self.burn.toggled.connect(self._changed)
+        self.page.body.addWidget(self.burn)
+        self.page.body.addSpacing(4)
+        self.page.add(label(tr("burn.help"), "Hint", wrap=True))
 
         self.more = MoreOptions()
         self.track = combo([(i, tr("sb.track.n", n=i + 1)) for i in range(4)], settings.subs_audio_track, self._changed)
@@ -100,6 +106,7 @@ class SubtitlesPage(QWidget):
         self.bar = ActionBar(self._start)
         outer.addWidget(self.bar)
         bridge.job_updated.connect(self._on_job)
+        self._sync_burn()
         self._set_translate(settings.subs_translate, save=False)
         self._level_changed(self.level.value(), save=False)
         run_in_background(gpu_mod.detect_gpus, self._on_gpus)
@@ -126,6 +133,14 @@ class SubtitlesPage(QWidget):
         self.gpu = next((g for g in gpus if g.index == self.settings.gpu_index), gpus[0] if gpus else None)
         self._recalc()
 
+    def _sync_burn(self) -> None:
+        """Writing onto the picture always makes a copy of the video, so that box is ticked then."""
+        burning = self.burn.isChecked()
+        self.inside.blockSignals(True)
+        self.inside.setChecked(burning or self.settings.subs_add_to_video)
+        self.inside.setEnabled(not burning)
+        self.inside.blockSignals(False)
+
     def _set_translate(self, on: bool, save: bool = True) -> None:
         self.same.set_selected(not on)
         self.english.set_selected(on)
@@ -144,7 +159,10 @@ class SubtitlesPage(QWidget):
     def _changed(self, *_args) -> None:
         s = self.settings
         s.subs_language = self.language.currentData()
-        s.subs_add_to_video = self.inside.isChecked()
+        if self.inside.isEnabled():
+            s.subs_add_to_video = self.inside.isChecked()
+        s.subs_burn_in = self.burn.isChecked()
+        self._sync_burn()
         s.subs_audio_track = int(self.track.currentData() or 0)
         s.save()
         self._recalc()
@@ -164,7 +182,7 @@ class SubtitlesPage(QWidget):
                     v.error = tr("err.no_audio")
                 continue
             e = sub_est.estimate(v.info, level=s.subs_level, gpu=self.gpu,
-                                 add_to_video=s.subs_add_to_video, stats=self.stats)
+                                 add_to_video=s.subs_add_to_video, stats=self.stats, burn_in=s.subs_burn_in)
             v.estimates["subs"] = e
             secs += e.seconds
             size += e.bytes
@@ -189,7 +207,7 @@ class SubtitlesPage(QWidget):
                 continue
             req = SubtitleRequest(
                 input=v.path, output_dir=out_dir, audio_track=s.subs_audio_track, language=s.subs_language,
-                translate=s.subs_translate, level=s.subs_level, add_to_video=s.subs_add_to_video,
+                translate=s.subs_translate, level=s.subs_level, add_to_video=s.subs_add_to_video, burn_in=s.subs_burn_in,
                 gpu_index=s.gpu_index,
             )
             self.bridge.queue.submit(v.path.name, lambda ctx, r=req: run_subtitles(r, ctx))

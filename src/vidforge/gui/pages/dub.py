@@ -113,7 +113,13 @@ class DubPage(QWidget):
         self.page.body.addWidget(self.inside)
         self.page.body.addSpacing(4)
         self.check_help = label("", "Hint", wrap=True)
-        self.page.add(self.check_help)
+        self.page.add(self.check_help, spacing_after=12)
+        self.burn = QCheckBox(tr("burn.check"))
+        self.burn.setChecked(settings.dub_burn_in)
+        self.burn.toggled.connect(self._changed)
+        self.page.body.addWidget(self.burn)
+        self.page.body.addSpacing(4)
+        self.page.add(label(tr("burn.help"), "Hint", wrap=True))
 
         self.page.section(tr("db.level"))
         self.level = ChipGroup([(k, tr(f"db.level.{k}")) for k in LEVELS],
@@ -138,6 +144,7 @@ class DubPage(QWidget):
         self.bar = ActionBar(self._start)
         outer.addWidget(self.bar)
         bridge.job_updated.connect(self._on_job)
+        self._sync_burn()
         self._target_changed(save=False)
         self._level_changed(self.level.value(), save=False)
         run_in_background(gpu_mod.detect_gpus, self._on_gpus)
@@ -210,6 +217,14 @@ class DubPage(QWidget):
         self._show_addon()
         self._recalc()
 
+    def _sync_burn(self) -> None:
+        """Writing onto the picture always makes a copy of the video, so that box is ticked then."""
+        burning = self.burn.isChecked()
+        self.inside.blockSignals(True)
+        self.inside.setChecked(burning or self.settings.dub_add_to_video)
+        self.inside.setEnabled(not burning)
+        self.inside.blockSignals(False)
+
     def _show_addon(self) -> None:
         installing = self.addon_job is not None and not self.addon_job.state.finished
         self.addon_box.setVisible(self.wants_voice() and not self.addon_ready)
@@ -239,7 +254,10 @@ class DubPage(QWidget):
     def _changed(self, *_args) -> None:
         s = self.settings
         s.dub_keep_original = self.keep.isChecked()
-        s.dub_add_to_video = self.inside.isChecked()
+        if self.inside.isEnabled():
+            s.dub_add_to_video = self.inside.isChecked()
+        s.dub_burn_in = self.burn.isChecked()
+        self._sync_burn()
         s.dub_language = self.spoken.currentData()
         s.dub_audio_track = int(self.track.currentData() or 0)
         s.save()
@@ -279,6 +297,7 @@ class DubPage(QWidget):
                     v.error = tr("err.no_audio")
                 continue
             e = dub_est.estimate(v.info, level=s.dub_level, dub=voice, add_to_video=s.dub_add_to_video,
+                                 burn_in=s.dub_burn_in,
                                  target=s.dub_target, gpu=self.gpu, transcript=self._transcript(v.path),
                                  stats=self.stats, voice=self.engine_name)
             v.estimates["dub"] = e
@@ -311,6 +330,7 @@ class DubPage(QWidget):
                 continue
             req = DubRequest(
                 input=v.path, target=s.dub_target, dub=self.wants_voice(), add_to_video=s.dub_add_to_video,
+                burn_in=s.dub_burn_in,
                 level=s.dub_level, keep_original=s.dub_keep_original, language=s.dub_language,
                 audio_track=s.dub_audio_track, output_dir=out_dir, gpu_index=s.gpu_index, voice=self.engine_name,
             )

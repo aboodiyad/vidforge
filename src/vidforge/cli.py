@@ -173,7 +173,7 @@ def cmd_subs(args) -> int:
     def make(path: Path):
         req = SubtitleRequest(
             input=path, output_dir=output_dir, audio_track=args.track - 1, language=args.language,
-            translate=args.english, level=args.level, add_to_video=args.add_to_video,
+            translate=args.english, level=args.level, add_to_video=args.add_to_video, burn_in=args.burn_in,
             gpu_index=args.gpu, overwrite=args.overwrite,
         )
         return lambda ctx: run_subtitles(req, ctx)
@@ -191,7 +191,7 @@ def cmd_dub(args) -> int:
             input=path, target=args.to, dub=not args.subtitles_only, add_to_video=args.add_to_video,
             level=args.level, keep_original=not args.no_original, language=args.language,
             audio_track=args.track - 1, output_dir=output_dir, gpu_index=args.gpu, overwrite=args.overwrite,
-            keep_temp=args.keep_temp, voice=args.voice,
+            keep_temp=args.keep_temp, voice=args.voice, burn_in=args.burn_in,
         )
         return lambda ctx: run_dub(req, ctx)
 
@@ -295,6 +295,8 @@ def build_parser() -> argparse.ArgumentParser:
     sb.add_argument("--english", action="store_true", help="write English subtitles whatever the spoken language")
     sb.add_argument("--level", choices=["quick", "balanced", "best"], default="balanced")
     sb.add_argument("--add-to-video", action="store_true", help="also save a copy of the video with the subtitles inside")
+    sb.add_argument("--burn-in", action="store_true",
+                    help="save a copy of the video with the subtitles written onto the picture (always shown; encodes the video again)")
     sb.add_argument("--track", type=int, default=1, help="sound track number (1 = first)")
     sb.add_argument("--output-dir")
     sb.add_argument("-o", "--output", help=argparse.SUPPRESS)
@@ -311,6 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--subtitles-only", action="store_true", help="only make translated subtitles, no new voice")
     d.add_argument("--add-to-video", action="store_true",
                    help="with --subtitles-only: also save a copy of the video with the subtitles inside")
+    d.add_argument("--burn-in", action="store_true",
+                   help="save a copy of the video with the subtitles written onto the picture (always shown; encodes the video again)")
     d.add_argument("--level", choices=DUB_LEVELS, default="best",
                    help="translator: best (Gemma 3 12B, default) or quick (Qwen3 8B)")
     d.add_argument("--voice", choices=["chatterbox", "xtts"], default="chatterbox",

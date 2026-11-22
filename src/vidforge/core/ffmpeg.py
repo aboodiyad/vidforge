@@ -57,6 +57,7 @@ def run_ffmpeg(
     on_progress: Callable[[float | None, str], None] | None = None,
     on_log: Callable[[str], None] | None = None,
     cancel: CancelToken | None = None,
+    cwd: str | Path | None = None,
 ) -> None:
     parser = ProgressParser(duration, on_progress or (lambda f, s: None))
 
@@ -64,4 +65,4 @@ def run_ffmpeg(
         if not parser.feed(line) and on_log:
             on_log(line)
 
-    run_process(ffmpeg_cmd(*args), on_line=handle, cancel=cancel)
+    run_process(ffmpeg_cmd(*args), on_line=handle, cancel=cancel, cwd=cwd)

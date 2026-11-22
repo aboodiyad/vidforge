@@ -333,3 +333,88 @@ def test_every_page_language_has_names_and_tags():
 
     for code, _ in LANGUAGES:
         assert code in tl.LANGUAGE_NAMES and code in tl.NATIVE_NAMES and code in ISO3, code
+
+
+# --- subtitles written onto the picture ----------------------------------------------------
+
+def _burn(tmp_path, lang="ar"):
+    from vidforge.core.encoders import Encoder
+    from vidforge.features.subtitles.burn import Burn
+
+    srt_file = tmp_path / "مرحبا: it's.srt"
+    srt_file.write_text("1\n00:00:00,000 --> 00:00:01,000\nمرحبا\n", encoding="utf-8")
+    return Burn(srt_file, lang, Encoder("h264_nvenc", "h264", "yuv420p", True, ("-cq", "20")))
+
+
+def test_burn_filter_quotes_and_fonts():
+    from vidforge.features.subtitles import burn
+
+    assert burn.quote(r"C:\a b\it's") == r"'C\:/a b/it'\''s'"
+    f = burn.video_filter("ar")
+    assert f.startswith("subtitles=subs.srt:fontsdir='") and "FontName=IBM Plex Sans Arabic" in f
+    assert burn.font_for("zh") == "Microsoft YaHei" and burn.font_for("fr") == burn.APP_FONT
+    assert (burn.fonts_dir() / "IBMPlexSansArabic-Bold.ttf").is_file()
+
+
+def test_burn_refuses_hdr_and_no_video():
+    from vidforge.features.subtitles import burn
+
+    hdr = info()
+    hdr.streams[0].color_transfer = "smpte2084"
+    with pytest.raises(FriendlyError) as e:
+        burn.check(hdr)
+    assert e.value.code == "hdr_burn"
+    with pytest.raises(FriendlyError):
+        burn.check(MediaInfo(path="", format_name="wav", duration=1.0, bit_rate=None,
+                             streams=[StreamInfo(index=0, kind="audio", codec="aac")]))
+    burn.check(info())
+
+
+def test_burned_copy_draws_and_skips_the_track(monkeypatch, tmp_path):
+    from vidforge.features.subtitles import service as subs_service
+
+    seen = {}
+
+    def fake(args, **kw):
+        seen["args"], seen["cwd"] = [str(a) for a in args], kw.get("cwd")
+        seen["copied"] = (Path(kw["cwd"]) / "subs.srt").read_text(encoding="utf-8")
+
+    from pathlib import Path
+
+    monkeypatch.setattr(subs_service, "run_ffmpeg", fake)
+    b = _burn(tmp_path)
+    subs_service.mux_subtitles(tmp_path / "in.mp4", info(subs=("subrip",)), b.srt, tmp_path / "out.mp4", "ara",
+                               cancel=None, on_progress=None, burn=b)
+    a = " ".join(seen["args"])
+    assert "-map 0:0 " in a and "-map 1:0" not in a and seen["args"].count("-i") == 1
+    assert "-filter:v:0 subtitles=subs.srt" in a and "-c:v h264_nvenc" in a
+    assert "-c:s:0 mov_text" in a and "-c:s:1" not in a  # the video's own subtitles stay, no new track
+    assert "مرحبا" in seen["copied"] and not Path(seen["cwd"]).exists()  # work folder cleaned up
+
+    seen.clear()
+    monkeypatch.setattr(service, "run_ffmpeg", fake)
+    service.mux_dub(tmp_path / "in.mp4", info(), tmp_path / "d.wav", b.srt, tmp_path / "out.mp4", target="ar",
+                    keep_original=True, cancel=None, on_progress=None, burn_in=b, work=tmp_path / "w")
+    a = " ".join(seen["args"])
+    assert "-map 2:0" not in a and "-filter:v:0 subtitles=subs.srt" in a and "mov_text" not in a
+    assert "-c:a:0 aac" in a and seen["args"].count("-i") == 2
+
+
+def test_burn_adds_time_to_estimates():
+    from vidforge.features.subtitles import estimate as sub_est
+
+    v = info()
+    v.streams[0].fps = 25.0
+    plain = sub_est.estimate(v, level="balanced", gpu=None, add_to_video=False)
+    burned = sub_est.estimate(v, level="balanced", gpu=None, add_to_video=False, burn_in=True)
+    assert burned.seconds > plain.seconds
+    d0 = estimate.estimate(v, level="quick", dub=False, add_to_video=False, target="ar", gpu=None)
+    d1 = estimate.estimate(v, level="quick", dub=False, add_to_video=False, target="ar", gpu=None, burn_in=True)
+    assert d1.seconds > d0.seconds
+
+
+def test_cli_burn_in_flags():
+    from vidforge.cli import build_parser
+
+    assert build_parser().parse_args(["subs", "x.mp4", "--burn-in"]).burn_in
+    assert build_parser().parse_args(["dub", "x.mp4", "--burn-in"]).burn_in

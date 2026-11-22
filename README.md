@@ -13,11 +13,14 @@ A Windows app for making videos look better, built from open-source parts.
   sharp with GFPGAN (natural) or CodeFormer (strong repair, free for personal use only). It can
   make the video bigger at the same time.
 - **Write the words**: listens to the video and writes subtitles (.srt) in the spoken language or
-  in English, with each line at the right moment. Can also add them inside a copy of the video.
+  in English, with each line at the right moment. Can also add them inside a copy of the video,
+  as a track you turn on and off, or **written onto the picture** so they show everywhere (phones,
+  WhatsApp, TV); that copy is encoded again, so it takes longer.
 - **Translate & dub**: turns the speech into another language. Translated subtitles always; and if
   you want, a new voice: every person speaks the new language in a voice like their own, while the
   music and sounds stay. The result is a copy of the video with the new voice as the main sound,
-  the original sound as a second track, and the translated subtitles as a track you can turn on.
+  the original sound as a second track, and the translated subtitles as a track you can turn on
+  (or written onto the picture, if you tick that).
   Translation runs on your PC with a local AI (Gemma 3 12B for "Best", Qwen3 8B for "Quick").
   Two voice makers: **Natural** (Chatterbox, the default) and **XTTS** (XTTS-v2: about twice as
   fast; its licence allows personal use only, not selling).
@@ -63,6 +66,7 @@ Later, just double-click **`Start VidForge.bat`** again.
 .venv\Scripts\vidforge faces my_video.mp4 --model gfpgan --size keep
 .venv\Scripts\vidforge faces --help
 .venv\Scripts\vidforge subs my_video.mp4 --level balanced
+.venv\Scripts\vidforge subs my_video.mp4 --burn-in      # subtitles written onto the picture
 .venv\Scripts\vidforge subs --help
 .venv\Scripts\vidforge addon install          # the voice add-on, once
 .venv\Scripts\vidforge dub my_video.mp4 --to ar

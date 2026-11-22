@@ -152,6 +152,7 @@ S: dict[str, tuple[str, str]] = {
     "err.bad_language": ("VidForge can't translate into this language.", "لا يستطيع VidForge الترجمة إلى هذه اللغة."),
     "err.voice_language": ("The new voice can't speak {lang} yet. Choose subtitles only.", "الصوت الجديد لا يتكلم {lang} بعد. اختر «ترجمة مكتوبة فقط»."),
     "err.voice_addon": ("The new voice needs the voice add-on. Install it on this page first.", "الصوت الجديد يحتاج إلى إضافة الصوت. ثبّتها من هذه الصفحة أولًا."),
+    "err.hdr_burn": ("Subtitles can't be written onto HDR video yet. Untick “Write them onto the picture”.", "لا يمكن كتابة الترجمة على فيديو HDR بعد. أزل علامة «اكتبها على الصورة»."),
     "err.generic": ("something went wrong. Open Details to see why.", "حدث خطأ ما. افتح «التفاصيل» لمعرفة السبب."),
 
     # --- settings ---
@@ -296,6 +297,11 @@ S: dict[str, tuple[str, str]] = {
     "sb.inside.help": (
         "You can then turn them on and off in your video player. A subtitle file (.srt) is always saved next to the video too.",
         "يمكنك بعدها تشغيلها وإيقافها من مشغّل الفيديو. يُحفظ أيضًا دائمًا ملف ترجمة (‎.srt) بجانب الفيديو.",
+    ),
+    "burn.check": ("Write them onto the picture, so they always show", "اكتبها على الصورة، لتظهر دائمًا"),
+    "burn.help": (
+        "Good for phones and sharing: every player and app shows them. They can't be turned off, and saving takes longer.",
+        "مناسب للهواتف والمشاركة: تظهر في كل مشغّل وتطبيق. لا يمكن إخفاؤها، ويستغرق الحفظ وقتًا أطول.",
     ),
     "sb.track": ("Sound track", "المسار الصوتي"),
     "sb.track.n": ("Track {n}", "المسار {n}"),
