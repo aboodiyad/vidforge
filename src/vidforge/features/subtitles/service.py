@@ -27,6 +27,7 @@ ISO3 = {
     "ja": "jpn", "ko": "kor", "zh": "zho", "tr": "tur", "hi": "hin", "ur": "urd", "fa": "fas", "nl": "nld",
     "sv": "swe", "pl": "pol", "id": "ind", "he": "heb", "uk": "ukr", "el": "ell", "cs": "ces", "ro": "ron",
     "hu": "hun", "th": "tha", "vi": "vie", "ms": "msa", "bn": "ben", "ta": "tam", "fil": "fil",
+    "da": "dan", "fi": "fin", "no": "nor", "sw": "swa",
 }
 
 

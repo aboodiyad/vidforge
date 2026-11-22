@@ -19,7 +19,9 @@ A Windows app for making videos look better, built from open-source parts.
   music and sounds stay. The result is a copy of the video with the new voice as the main sound,
   the original sound as a second track, and the translated subtitles as a track you can turn on.
   Translation runs on your PC with a local AI (Gemma 3 12B for "Best", Qwen3 8B for "Quick").
-  The voice needs a one-time **voice add-on** (about 5 GB with an NVIDIA card), offered on that page.
+  Two voice makers: **Natural** (Chatterbox, the default) and **XTTS** (XTTS-v2: about twice as
+  fast; its licence allows personal use only, not selling).
+  The voice needs a one-time **voice add-on** (about 5.5 GB with an NVIDIA card), offered on that page.
 - **English and Arabic** (right-to-left). Change it in **Settings**.
 
 ## Try it
@@ -48,8 +50,10 @@ Later, just double-click **`Start VidForge.bat`** again.
   Quick) and the voice models (3.3 GB). A new voice takes about twice as long as the video on an
   RTX 2060 SUPER; subtitles only take a minute or two. It needs a card with 8 GB of video memory
   to run at full speed; with less it still works, more slowly.
-- The new voice speaks 23 languages (Arabic, English, French, Spanish, German, Turkish, Russian,
-  Hindi, Chinese, Japanese and more). Subtitles can be translated into any language in the list.
+- The Natural voice speaks 23 languages (Arabic, English, French, Spanish, German, Turkish, Russian,
+  Hindi, Chinese, Japanese and more); XTTS speaks 17, including Arabic, Czech and Hungarian.
+  Subtitles can be translated into any language in the list.
+- XTTS downloads its own voice files (1.9 GB) the first time you pick it.
 
 ## Command line
 
@@ -80,6 +84,8 @@ Later, just double-click **`Start VidForge.bat`** again.
 - [Chatterbox Multilingual](https://github.com/resemble-ai/chatterbox) voice by Resemble AI (MIT; its
   output carries Resemble's inaudible Perth watermark), [Demucs](https://github.com/facebookresearch/demucs)
   voice separation (MIT), [PyTorch](https://pytorch.org) (BSD)
+- [XTTS-v2](https://huggingface.co/coqui/XTTS-v2) by Coqui (Coqui Public Model License, non-commercial),
+  run with the [coqui-tts](https://github.com/idiap/coqui-ai-TTS) library (MPL-2.0)
 - [OpenCV](https://opencv.org) (Apache-2.0); interface font IBM Plex Sans Arabic (SIL Open Font License)
 - [FFmpeg](https://ffmpeg.org) (GPL build from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds))
 - [ONNX Runtime](https://onnxruntime.ai) with DirectML, [Qt for Python (PySide6)](https://doc.qt.io/qtforpython/)

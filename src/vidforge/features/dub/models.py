@@ -8,6 +8,9 @@
 - Voice: Chatterbox Multilingual (MIT) from ResembleAI/chatterbox, pinned to one commit. Hashes
   of the large files are the LFS SHA-256 values Hugging Face publishes; the small tokenizer file
   was checked against its git blob id and then pinned.
+- Voice, option: XTTS-v2 (Coqui Public Model License: non-commercial, so personal use only), from
+  coqui/XTTS-v2 pinned to one commit; LFS SHA-256 values, the two small JSON files checked against
+  their git blob ids and then pinned.
 - Separating voices from music: Demucs "htdemucs" (MIT). Facebook's file name carries the first
   8 hex digits of its SHA-256 (8726e21a), which matches the full hash pinned here.
 """
@@ -58,11 +61,30 @@ models.register(models.ModelSpec(
     filename=DEMUCS_FILE, size_mb=84.1, license="MIT", feature="dub",
 ))
 
-# Languages the Chatterbox Multilingual voice can speak (ISO 639-1).
+XTTS_FOLDER = "xtts-v2"
+_XT = "https://huggingface.co/coqui/XTTS-v2/resolve/6c2b0d75eae4b7047358e3b6bd9325f857d43f77/{}"
+XTTS_FILES = [
+    ("config.json", "ef262b1454dd2a77e1461b0b2cd53e19b8a7624cc131b837d36df67356bc75e8", 0.1),
+    ("vocab.json", "928260878a59da8a72a2a5b7687fea29d5106137669d90945430fe17e415304a", 0.4),
+    ("model.pth", "c7ea20001c6a0a841c77e252d8409f6a74fb423e79b3206a0771ba5989776187", 1867.9),
+    ("speakers_xtts.pth", "f0f6137c19a4eab0cbbe4c99b5babacf68b1746e50da90807708c10e645b943b", 7.8),
+]
+for _file, _sha, _mb in XTTS_FILES:
+    models.register(models.ModelSpec(
+        key=f"xtts-{_file}", display=f"XTTS-v2 ({_file})", url=_XT.format(_file), sha256=_sha, filename=_file,
+        size_mb=_mb, license="Coqui Public Model License (non-commercial)", feature="dub",
+        commercial_ok=False, folder=XTTS_FOLDER,
+    ))
+
+# The voices, and the languages each can speak (ISO 639-1).
+ENGINES = ("chatterbox", "xtts")
 VOICE_LANGUAGES = {
-    "ar", "da", "de", "el", "en", "es", "fi", "fr", "he", "hi", "it", "ja", "ko", "ms", "nl", "no", "pl",
-    "pt", "ru", "sv", "sw", "tr", "zh",
+    "chatterbox": {"ar", "da", "de", "el", "en", "es", "fi", "fr", "he", "hi", "it", "ja", "ko", "ms", "nl", "no",
+                   "pl", "pt", "ru", "sv", "sw", "tr", "zh"},
+    "xtts": {"ar", "cs", "de", "en", "es", "fr", "hi", "hu", "it", "ja", "ko", "nl", "pl", "pt", "ru", "tr", "zh"},
 }
+# XTTS's own name for a language when it differs from ISO 639-1.
+XTTS_CODES = {"zh": "zh-cn"}
 
 Progress = Callable[[int, int | None], None]
 
@@ -71,17 +93,29 @@ def llm_installed(level: str) -> bool:
     return models.is_installed(TRANSLATORS[level])
 
 
-def voice_installed() -> bool:
-    return all(models.is_installed(f"chatterbox-{f}") for f, _, _ in VOICE_FILES) and models.is_installed(DEMUCS_KEY)
+def voice_keys(engine: str) -> list[str]:
+    """Model files a voice needs. Telling speakers apart always uses Chatterbox's small voice
+    encoder (ve.pt), and the background always comes from Demucs."""
+    if engine == "xtts":
+        own = [f"xtts-{f}" for f, _, _ in XTTS_FILES] + ["chatterbox-ve.pt"]
+    else:
+        own = [f"chatterbox-{f}" for f, _, _ in VOICE_FILES]
+    return own + [DEMUCS_KEY]
+
+
+def voice_installed(engine: str = "chatterbox") -> bool:
+    return all(models.is_installed(k) for k in voice_keys(engine))
 
 
 def ensure_llm(level: str, *, progress: Progress | None = None, cancel: CancelToken | None = None) -> Path:
     return models.ensure(TRANSLATORS[level], progress=progress, cancel=cancel)
 
 
-def ensure_voice(*, progress: Progress | None = None, cancel: CancelToken | None = None) -> tuple[Path, Path]:
-    """Download the voice and voice-separation models; returns (chatterbox folder, demucs file)."""
-    keys = [f"chatterbox-{f}" for f, _, _ in VOICE_FILES] + [DEMUCS_KEY]
+def ensure_voice(engine: str = "chatterbox", *, progress: Progress | None = None,
+                 cancel: CancelToken | None = None) -> dict[str, Path]:
+    """Download what the voice needs; returns the folders/files by name: "voice" (the chosen
+    voice's folder), "encoder" (folder with ve.pt) and "demucs" (the separation model file)."""
+    keys = voice_keys(engine)
     total = int(sum(models.MODELS[k].size_mb for k in keys) * 1e6)
     done_before = 0
     for k in keys:
@@ -89,13 +123,15 @@ def ensure_voice(*, progress: Progress | None = None, cancel: CancelToken | None
             cb = (lambda d, t, o=done_before: progress(o + d, total)) if progress else None
             models.ensure(k, progress=cb, cancel=cancel)
         done_before += int(models.MODELS[k].size_mb * 1e6)
-    return models.model_path(keys[0]).parent, models.model_path(DEMUCS_KEY)
+    return {"voice": models.model_path(keys[0]).parent, "encoder": models.model_path("chatterbox-ve.pt").parent,
+            "demucs": models.model_path(DEMUCS_KEY)}
 
 
-def download_mb(level: str, *, voice: bool) -> float:
+def download_mb(level: str, *, voice: str | None) -> float:
+    """MB still to download; *voice* is the voice engine, or None for subtitles only."""
     mb = 0.0 if llm_installed(level) else models.MODELS[TRANSLATORS[level]].size_mb
     if voice:
-        for k in [f"chatterbox-{f}" for f, _, _ in VOICE_FILES] + [DEMUCS_KEY]:
+        for k in voice_keys(voice):
             if not models.is_installed(k):
                 mb += models.MODELS[k].size_mb
     return mb

@@ -13,7 +13,7 @@ from ...core.jobs import Job, JobContext
 from ...core.settings import Settings
 from ...features.dub import addon
 from ...features.dub import estimate as dub_est
-from ...features.dub.models import VOICE_LANGUAGES
+from ...features.dub.models import ENGINES, VOICE_LANGUAGES
 from ...features.dub.service import LEVELS, DubRequest, run_dub
 from ...features.subtitles.service import load_transcript
 from ...features.upscale import estimate as up_est
@@ -37,7 +37,7 @@ class DubPage(QWidget):
         self.gpu: gpu_mod.GpuInfo | None = None
         self.stats = up_est.load_stats()
         self.transcripts: dict[Path, object] = {}
-        self.addon_ready = addon.is_installed()
+        self.engine_name = settings.dub_engine if settings.dub_engine in ENGINES else "chatterbox"
         self.addon_job: Job | None = None
         self.setAcceptDrops(True)
 
@@ -72,6 +72,22 @@ class DubPage(QWidget):
         holder = QWidget()
         holder.setLayout(tiles)
         self.page.add(holder, spacing_after=14)
+
+        # Which voice: only shown when a new voice is chosen.
+        self.engine_box = QWidget()
+        eb = QVBoxLayout(self.engine_box)
+        eb.setContentsMargins(0, 0, 0, 0)
+        eb.setSpacing(0)
+        eb.addSpacing(8)
+        eb.addWidget(label(tr("db.engine"), "SectionTitle"))
+        eb.addSpacing(12)
+        self.engine = ChipGroup([(k, tr(f"db.engine.{k}")) for k in ENGINES], self.engine_name)
+        self.engine.changed.connect(self._engine_changed)
+        eb.addWidget(self.engine)
+        eb.addSpacing(8)
+        self.engine_desc = label("", "Hint", wrap=True)
+        eb.addWidget(self.engine_desc)
+        self.page.add(self.engine_box, spacing_after=18)
 
         # The voice add-on, offered when a new voice is chosen and it isn't installed yet.
         self.addon_box, lay = panel(QHBoxLayout, margins=(18, 16, 18, 16), spacing=14)
@@ -149,17 +165,33 @@ class DubPage(QWidget):
         self._show_addon()
         self._recalc()
 
+    @property
+    def addon_ready(self) -> bool:
+        return addon.is_installed(self.engine_name)
+
     def voice_possible(self) -> bool:
-        return self.target.currentData() in VOICE_LANGUAGES
+        return self.target.currentData() in VOICE_LANGUAGES[self.engine_name]
+
+    def voice_chosen(self) -> bool:
+        """The new-voice tile is picked (and some voice maker speaks the language)."""
+        return self.settings.dub_voice and any(self.target.currentData() in VOICE_LANGUAGES[e] for e in ENGINES)
 
     def wants_voice(self) -> bool:
-        return self.settings.dub_voice and self.voice_possible()
+        """A new voice will really be made: chosen, and the chosen voice maker speaks the language."""
+        return self.voice_chosen() and self.voice_possible()
 
     def _target_changed(self, *_args, save: bool = True) -> None:
         self.settings.dub_target = self.target.currentData()
         ok = self.voice_possible()
-        self.voice_tile.set_available(ok, tr("db.voice.no_lang"))
-        self.voice_tile.estimate.setVisible(not ok)
+        # The tile stays usable when the other voice can speak this language: pick that voice.
+        any_ok = any(self.target.currentData() in VOICE_LANGUAGES[e] for e in ENGINES)
+        self.voice_tile.set_available(any_ok, tr("db.voice.no_lang"))
+        self.voice_tile.estimate.setVisible(not any_ok)
+        if not ok and any_ok:
+            self.engine.set_value(next(e for e in ENGINES if self.target.currentData() in VOICE_LANGUAGES[e]))
+            self._engine_changed(self.engine.value(), save=save, refresh=False)
+        else:
+            self._engine_changed(self.engine_name, save=False, refresh=False)
         if save:
             self.settings.save()
         self._set_voice(self.settings.dub_voice, save=False)
@@ -168,10 +200,11 @@ class DubPage(QWidget):
         if save:
             self.settings.dub_voice = on
             self.settings.save()
-        voice = self.wants_voice()
+        voice = self.voice_chosen()
         self.subs_tile.set_selected(not voice)
         self.voice_tile.set_selected(voice)
         self.keep.setVisible(voice)
+        self.engine_box.setVisible(voice)
         self.inside.setVisible(not voice)
         self.check_help.setText(tr("db.keep.help") if voice else tr("db.inside.help"))
         self._show_addon()
@@ -183,6 +216,18 @@ class DubPage(QWidget):
         gb = dub_est.addon_mb(self.gpu) / 1000
         self.addon_text.setText(tr("db.addon.installing") if installing else tr("db.addon.desc", gb=f"{gb:.0f}"))
         self.addon_btn.setEnabled(not installing)
+
+    def _engine_changed(self, value: str, save: bool = True, refresh: bool = True) -> None:
+        self.engine_name = value
+        self.settings.dub_engine = value
+        desc = tr(f"db.engine.{value}.desc")
+        if self.target.currentData() not in VOICE_LANGUAGES[value]:
+            desc += " " + tr("db.engine.no_lang")
+        self.engine_desc.setText(desc)
+        if save:
+            self.settings.save()
+        if refresh:
+            self._set_voice(self.settings.dub_voice, save=False)
 
     def _level_changed(self, value: str, save: bool = True) -> None:
         self.level_desc.setText(tr(f"db.level.{value}.desc"))
@@ -235,14 +280,14 @@ class DubPage(QWidget):
                 continue
             e = dub_est.estimate(v.info, level=s.dub_level, dub=voice, add_to_video=s.dub_add_to_video,
                                  target=s.dub_target, gpu=self.gpu, transcript=self._transcript(v.path),
-                                 stats=self.stats)
+                                 stats=self.stats, voice=self.engine_name)
             v.estimates["dub"] = e
             secs += e.seconds
             size += e.bytes
             download = max(download, e.download_mb)
             ready += 1
-        if voice and not self.addon_ready:
-            ready = 0  # nothing can start until the voice add-on is in
+        if self.voice_chosen() and not (voice and self.addon_ready):
+            ready = 0  # nothing can start until the voice add-on is in and the voice speaks the language
         self.videos.show_estimates("dub")
         self.bar.show_totals(len(self.videos.videos), ready, secs, size, download)
 
@@ -250,7 +295,6 @@ class DubPage(QWidget):
         if not job.state.finished:
             return
         if self.addon_job is not None and job.id == self.addon_job.id:
-            self.addon_ready = addon.is_installed()
             self._show_addon()
         self.stats = up_est.load_stats()
         self.transcripts.clear()  # a subtitles job may have just made one
@@ -268,7 +312,7 @@ class DubPage(QWidget):
             req = DubRequest(
                 input=v.path, target=s.dub_target, dub=self.wants_voice(), add_to_video=s.dub_add_to_video,
                 level=s.dub_level, keep_original=s.dub_keep_original, language=s.dub_language,
-                audio_track=s.dub_audio_track, output_dir=out_dir, gpu_index=s.gpu_index,
+                audio_track=s.dub_audio_track, output_dir=out_dir, gpu_index=s.gpu_index, voice=self.engine_name,
             )
             self.bridge.queue.submit(v.path.name, lambda ctx, r=req: run_dub(r, ctx))
             self.videos.remove_row(row)

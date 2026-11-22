@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
     QWidget,
@@ -113,6 +114,10 @@ class ChipGroup(QWidget):
             b.setCheckable(True)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.clicked.connect(lambda _=False, v=value: self.changed.emit(v))
+            # The chosen chip is drawn bolder; make room for that so its text is never cut off.
+            bold = QFont(b.font())
+            bold.setWeight(QFont.Weight.Bold)
+            b.setMinimumWidth(QFontMetrics(bold).horizontalAdvance(text) + 2 * 16 + 8)
             self.group.addButton(b)
             self.buttons[value] = b
             lay.addWidget(b)

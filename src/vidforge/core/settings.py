@@ -33,6 +33,7 @@ class Settings:
     dub_target: str = "ar"
     dub_voice: bool = True  # False = translated subtitles only
     dub_level: str = "best"
+    dub_engine: str = "chatterbox"  # the voice: chatterbox or xtts
     dub_add_to_video: bool = True  # subtitles only: also a copy of the video with them inside
     dub_keep_original: bool = True
     dub_language: str = "auto"

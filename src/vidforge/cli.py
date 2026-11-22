@@ -191,7 +191,7 @@ def cmd_dub(args) -> int:
             input=path, target=args.to, dub=not args.subtitles_only, add_to_video=args.add_to_video,
             level=args.level, keep_original=not args.no_original, language=args.language,
             audio_track=args.track - 1, output_dir=output_dir, gpu_index=args.gpu, overwrite=args.overwrite,
-            keep_temp=args.keep_temp,
+            keep_temp=args.keep_temp, voice=args.voice,
         )
         return lambda ctx: run_dub(req, ctx)
 
@@ -313,6 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="with --subtitles-only: also save a copy of the video with the subtitles inside")
     d.add_argument("--level", choices=DUB_LEVELS, default="best",
                    help="translator: best (Gemma 3 12B, default) or quick (Qwen3 8B)")
+    d.add_argument("--voice", choices=["chatterbox", "xtts"], default="chatterbox",
+                   help="chatterbox (default, MIT) or xtts (XTTS-v2: non-commercial licence, personal use only)")
     d.add_argument("--no-original", action="store_true", help="don't keep the original sound as a second track")
     d.add_argument("-l", "--language", default="auto", help="spoken language if the video was never transcribed")
     d.add_argument("--track", type=int, default=1, help="sound track number (1 = first)")

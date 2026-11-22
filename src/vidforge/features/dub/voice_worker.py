@@ -6,7 +6,8 @@ inside VidForge itself, so it imports nothing from VidForge.
 The job file lists the steps to do, any of:
   separate  - split the sound into the voices and everything else (Demucs htdemucs)
   speakers  - tell apart who speaks each line, and cut a short sample of each voice
-  tts       - say every translated line in the matching voice (Chatterbox Multilingual)
+  tts       - say every translated line in the matching voice (Chatterbox Multilingual, or
+              XTTS-v2 when the job says engine "xtts")
 Progress goes to stdout as lines starting with "@@" followed by JSON; everything else is log
 text. The results are written to the "result" path in the job file.
 """
@@ -127,7 +128,8 @@ def speakers(job: dict, device: str, ve=None) -> dict:
         from chatterbox.models.voice_encoder import VoiceEncoder
 
         ve = VoiceEncoder()
-        ve.load_state_dict(torch.load(Path(job["model_dir"]) / "ve.pt", map_location="cpu", weights_only=True))
+        enc = Path(job.get("encoder_dir") or job["model_dir"])
+        ve.load_state_dict(torch.load(enc / "ve.pt", map_location="cpu", weights_only=True))
         ve.to(device).eval()
     sr = 16000
     wav16 = _load_mono(job["vocals"], sr)
@@ -193,17 +195,77 @@ def _trim(wav: np.ndarray, sr: int, floor_db: float = -42.0) -> np.ndarray:
     return wav[a:b]
 
 
-def tts(job: dict, device: str) -> dict:
-    from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+class ChatterboxVoice:
+    """Chatterbox Multilingual (MIT)."""
 
+    def __init__(self, model_dir: str, device: str, job: dict):
+        from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+
+        self.model = ChatterboxMultilingualTTS.from_local(model_dir, device)
+        self.sr = self.model.sr
+        self.ve = self.model.ve  # reused to tell speakers apart
+        self.exaggeration = job.get("exaggeration", 0.5)
+        self.cfg_weight = job.get("cfg_weight", 0.0)
+
+    def prepare(self, ref: str | None):
+        if ref:
+            self.model.prepare_conditionals(ref, exaggeration=self.exaggeration)
+        return self.model.conds
+
+    def say(self, text: str, lang: str, cond) -> np.ndarray:
+        self.model.conds = cond
+        with torch.inference_mode():
+            out = self.model.generate(text, language_id=lang, exaggeration=self.exaggeration,
+                                      cfg_weight=self.cfg_weight, temperature=0.8)
+        return out.squeeze(0).cpu().numpy().astype(np.float32)
+
+
+class XttsVoice:
+    """Coqui XTTS-v2 (non-commercial licence). Copies a voice from a few seconds of speech."""
+
+    def __init__(self, model_dir: str, device: str, job: dict):
+        os.environ.setdefault("COQUI_TOS_AGREED", "1")  # files come from VidForge; nothing is downloaded
+        from TTS.tts.configs.xtts_config import XttsConfig
+        from TTS.tts.models.xtts import Xtts
+
+        cfg = XttsConfig()
+        cfg.load_json(str(Path(model_dir) / "config.json"))
+        self.model = Xtts.init_from_config(cfg)
+        self.model.load_checkpoint(cfg, checkpoint_dir=str(model_dir), use_deepspeed=False, eval=True)
+        self.model.to(device)
+        self.sr = int(cfg.audio.output_sample_rate)
+        self.ve = None
+        self.codes = job.get("codes", {})
+
+    def prepare(self, ref: str | None):
+        if not ref:
+            raise SystemExit("XTTS needs a voice sample")
+        with torch.inference_mode():
+            return self.model.get_conditioning_latents(audio_path=[ref], gpt_cond_len=30, max_ref_length=60)
+
+    def say(self, text: str, lang: str, cond) -> np.ndarray:
+        latent, speaker = cond
+        with torch.inference_mode():
+            out = self.model.inference(text, self.codes.get(lang, lang), latent, speaker, temperature=0.7,
+                                       repetition_penalty=5.0, top_k=50, top_p=0.85, speed=1.0,
+                                       enable_text_splitting=True)
+        wav = out["wav"]
+        return (wav.cpu().numpy() if hasattr(wav, "cpu") else np.asarray(wav)).astype(np.float32).reshape(-1)
+
+
+ENGINES = {"chatterbox": ChatterboxVoice, "xtts": XttsVoice}
+
+
+def tts(job: dict, device: str) -> dict:
+    engine = job.get("engine", "chatterbox")
     emit(stage="tts", progress=0.0, msg="loading voice")
     t0 = time.monotonic()
-    model = ChatterboxMultilingualTTS.from_local(job["model_dir"], device)
-    log(f"voice model loaded in {time.monotonic() - t0:.1f}s on {device}")
+    voice = ENGINES[engine](job["model_dir"], device, job)
+    log(f"{engine} voice loaded in {time.monotonic() - t0:.1f}s on {device}")
     results: dict = {}
     if job.get("speakers"):
-        sp = dict(job["speakers"], model_dir=job["model_dir"])
-        results["speakers"] = speakers(sp, device, ve=model.ve)
+        sp = dict(job["speakers"], model_dir=job["model_dir"], encoder_dir=job.get("encoder_dir"))
+        results["speakers"] = speakers(sp, device, ve=voice.ve)
         refs = results["speakers"]["refs"]
         labels = results["speakers"]["labels"]
         for line, lb in zip(job["lines"], labels):
@@ -218,41 +280,35 @@ def tts(job: dict, device: str) -> dict:
     total_chars = sum(len(x["text"]) for x in lines) or 1
     chars = 0
     lang = job["language"]
+    sr = voice.sr
     order = sorted(range(len(lines)), key=lambda i: (str(lines[i].get("speaker", 0)), i))
     t_start = time.monotonic()
     for k in order:
         line = lines[k]
         spk = str(line.get("speaker", 0))
         if spk not in conds:
-            ref = refs.get(spk) or next(iter(refs.values()), None)
-            if ref:
-                model.prepare_conditionals(ref, exaggeration=job.get("exaggeration", 0.5))
-            conds[spk] = model.conds
-        model.conds = conds[spk]
+            conds[spk] = voice.prepare(refs.get(spk) or next(iter(refs.values()), None))
         expect = line.get("expect", 0) or len(line["text"]) / 12.0
         wav = None
         for attempt in range(3):
             torch.manual_seed(1234 + int(line["id"]) * 7 + attempt)
-            with torch.inference_mode():
-                out = model.generate(line["text"], language_id=lang, exaggeration=job.get("exaggeration", 0.5),
-                                     cfg_weight=job.get("cfg_weight", 0.0), temperature=0.8)
-            take = _trim(out.squeeze(0).cpu().numpy().astype(np.float32), model.sr)
-            if len(take) > 0.2 * model.sr and (wav is None or len(take) < len(wav)):
+            take = _trim(voice.say(line["text"], lang, conds[spk]), sr)
+            if len(take) > 0.2 * sr and (wav is None or len(take) < len(wav)):
                 wav = take  # of odd takes, the shortest one babbles least
             # A run-on take (the model talking on past the end) is redone, at most twice.
-            if wav is not None and len(wav) / model.sr <= max(2.0 * expect, expect + 3):
+            if wav is not None and len(wav) / sr <= max(2.0 * expect, expect + 3):
                 break
-            log(f"line {line['id']}: odd length {len(take) / model.sr:.1f}s for {expect:.1f}s expected, redoing")
+            log(f"line {line['id']}: odd length {len(take) / sr:.1f}s for {expect:.1f}s expected, redoing")
         if wav is None:
-            wav = np.zeros(int(0.3 * model.sr), dtype=np.float32)
+            wav = np.zeros(int(0.3 * sr), dtype=np.float32)
         p = out_dir / f"line{int(line['id']):04d}.wav"
-        sf.write(str(p), wav, model.sr, subtype="PCM_16")
-        done.append({"id": line["id"], "path": str(p), "seconds": len(wav) / model.sr, "speaker": spk})
+        sf.write(str(p), wav, sr, subtype="PCM_16")
+        done.append({"id": line["id"], "path": str(p), "seconds": len(wav) / sr, "speaker": spk})
         chars += len(line["text"])
         emit(stage="tts", progress=chars / total_chars, line=line["id"])
     results["lines"] = sorted(done, key=lambda d: d["id"])
     results["tts_seconds"] = time.monotonic() - t_start
-    del model
+    del voice
     if device == "cuda":
         torch.cuda.empty_cache()
     return results

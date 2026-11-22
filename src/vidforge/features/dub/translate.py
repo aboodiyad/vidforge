@@ -37,6 +37,7 @@ NATIVE_NAMES = {
     "pt": "Português", "tr": "Türkçe", "ru": "Русский", "uk": "Українська", "fa": "فارسی", "ur": "اردو",
     "hi": "हिन्दी", "bn": "বাংলা", "id": "Bahasa Indonesia", "ms": "Bahasa Melayu", "ja": "日本語", "ko": "한국어",
     "zh": "中文", "nl": "Nederlands", "pl": "Polski", "sv": "Svenska", "el": "Ελληνικά", "he": "עברית",
+    "cs": "Čeština", "hu": "Magyar", "da": "Dansk", "fi": "Suomi", "no": "Norsk", "sw": "Kiswahili",
 }
 # How the target language should sound; Arabic speakers expect Modern Standard Arabic in dubs.
 STYLE = {"ar": "Use clear Modern Standard Arabic (فصحى) without diacritics."}

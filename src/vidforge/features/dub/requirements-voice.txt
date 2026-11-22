@@ -17,3 +17,7 @@ omegaconf
 pykakasi==2.3.0
 soundfile
 demucs==4.1.0
+# XTTS-v2 voice (optional choice; the model itself is non-commercial, personal use only).
+# numpy<2 above keeps it on the same numpy as Chatterbox; it imports six without listing it.
+coqui-tts==0.28.0
+six

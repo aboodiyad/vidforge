@@ -53,6 +53,7 @@ class DubRequest:
     gpu_index: int = 0
     overwrite: bool = False
     keep_temp: bool = False
+    voice: str = "chatterbox"  # chatterbox (MIT) or xtts (XTTS-v2, personal use only)
 
 
 class Spans:
@@ -81,10 +82,12 @@ def _check(req: DubRequest) -> None:
     if req.target not in tl.LANGUAGE_NAMES:
         raise FriendlyError("bad_language", f"unknown language {req.target}", lang=req.target)
     if req.dub:
-        if req.target not in models.VOICE_LANGUAGES:
+        if req.voice not in models.ENGINES:
+            raise ValueError(f"voice must be one of {models.ENGINES}")
+        if req.target not in models.VOICE_LANGUAGES[req.voice]:
             raise FriendlyError("voice_language", f"the voice can't speak {tl.language_name(req.target)} yet",
                                 lang=tl.NATIVE_NAMES.get(req.target, req.target))
-        if not addon.is_installed():
+        if not addon.is_installed(req.voice):
             raise FriendlyError("voice_addon", "the voice add-on is not installed (vidforge addon install)")
 
 
@@ -186,7 +189,7 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
     }
     if req.dub:
         weights.update(separate=estimate.WORKER_STARTUP + dur / estimate.SEPARATE_SPEED[dev],
-                       voice=spoken_guess / estimate.TTS_SPEED[dev], fit=3 + dur / 100)
+                       voice=spoken_guess / estimate.TTS_SPEED[(req.voice, dev)], fit=3 + dur / 100)
     weights["save"] = 1 + dur / 150
     spans = Spans(ctx, weights)
 
@@ -211,7 +214,7 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
     if tools.locate("llama")[0] is None:
         tools.fetch("llama", progress=_downloader(spans, "translator program"), cancel=ctx.cancel)
     model = models.ensure_llm(req.level, progress=_downloader(spans, "translator"), cancel=ctx.cancel)
-    rate = tl.cps(req.target, estimate.learned_cps(stats))
+    rate = tl.cps(req.target, estimate.learned_cps(stats, req.voice))
     spans.report("translate", 0.0, "starting the translator")
     t0 = time.monotonic()
     with llm.LlamaServer(model, cancel=ctx.cancel, on_log=ctx.log, gpu=dev == "gpu") as server:
@@ -256,11 +259,11 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
         return result
 
     # 3. voices
-    voice_dir, demucs_file = models.ensure_voice(progress=_downloader(spans, "voice"), cancel=ctx.cancel)
+    voice_files = models.ensure_voice(req.voice, progress=_downloader(spans, "voice"), cancel=ctx.cancel)
     work = paths.temp_dir() / f"dub-{uuid.uuid4().hex[:12]}"
     work.mkdir(parents=True, exist_ok=True)
     try:
-        result = _dub_audio_and_save(req, ctx, spans, src, info, work, lines, cues, model, voice_dir, demucs_file,
+        result = _dub_audio_and_save(req, ctx, spans, src, info, work, lines, cues, model, voice_files,
                                      rate, dev, srt_path, dst)
     finally:
         if not req.keep_temp:
@@ -273,7 +276,7 @@ def run_dub(req: DubRequest, ctx: JobContext) -> Path:
 
 
 def _dub_audio_and_save(req: DubRequest, ctx: JobContext, spans: Spans, src: Path, info: MediaInfo, work: Path,
-                        lines: list[tl.Line], cues, model: Path, voice_dir: Path, demucs_file: Path, rate: float,
+                        lines: list[tl.Line], cues, model: Path, voice_files: dict[str, Path], rate: float,
                         dev: str, srt_path: Path, dst: Path) -> Path:
     dur = info.duration or 0.0
     track = req.audio_track if 0 <= req.audio_track < len(info.audio) else 0
@@ -298,15 +301,17 @@ def _dub_audio_and_save(req: DubRequest, ctx: JobContext, spans: Spans, src: Pat
     def tts_lines(todo: list[tl.Line]) -> list[dict]:
         return [{"id": ln.id, "text": ln.text, "expect": min(ln.slot, len(ln.text) / rate)} for ln in todo]
 
+    # cfg_weight 0: Chatterbox carries less of the reference language's accent over.
+    voice_job = {"engine": req.voice, "model_dir": str(voice_files["voice"]), "encoder_dir": str(voice_files["encoder"]),
+                 "language": req.target, "codes": models.XTTS_CODES, "cfg_weight": 0.0, "exaggeration": 0.5}
     spans.report("separate", 0.02, "starting the voice helper")
     result = run_worker({
         "device": device,
-        "separate": {"input": str(mix_wav), "model": str(demucs_file), "vocals": str(work / "vocals.wav"),
+        "separate": {"input": str(mix_wav), "model": str(voice_files["demucs"]), "vocals": str(work / "vocals.wav"),
                      "background": str(work / "background.wav")},
         "speakers": {"vocals": str(work / "vocals.wav"), "segments": [[ln.start, ln.end] for ln in lines],
                      "out_dir": str(work / "voices"), "threshold": 0.75},
-        "tts": {"model_dir": str(voice_dir), "language": req.target, "out_dir": str(work / "lines"),
-                "lines": tts_lines(lines), "cfg_weight": 0.0, "exaggeration": 0.5},
+        "tts": dict(voice_job, out_dir=str(work / "lines"), lines=tts_lines(lines)),
     }, work, ctx=ctx, on_stage=on_stage)
     worker_seconds = time.monotonic() - t_worker
     labels = result.get("speakers", {}).get("labels", [])
@@ -321,10 +326,10 @@ def _dub_audio_and_save(req: DubRequest, ctx: JobContext, spans: Spans, src: Pat
     chars = sum(len(ln.text) for ln in lines)
     seconds = sum(said[ln.id]["seconds"] for ln in lines)
     if seconds > 3:
-        estimate.learn(f"dub/cps/{req.target}", chars / seconds)
+        estimate.learn(f"dub/cps/{req.voice}/{req.target}", chars / seconds)
         rate = chars / seconds
     if result.get("tts_seconds"):
-        estimate.learn(f"dub/tts/{dev}", seconds / result["tts_seconds"])
+        estimate.learn(f"dub/tts/{req.voice}/{dev}", seconds / result["tts_seconds"])
     if result.get("separate_seconds") and dur > 10:
         estimate.learn(f"dub/separate/{dev}", dur / result["separate_seconds"])
     ctx.log(f"voice helper took {worker_seconds:.0f}s")
@@ -346,9 +351,8 @@ def _dub_audio_and_save(req: DubRequest, ctx: JobContext, spans: Spans, src: Pat
             spans.report("fit", 0.3, "saying the shorter lines")
             again = run_worker({
                 "device": device,
-                "tts": {"model_dir": str(voice_dir), "language": req.target, "out_dir": str(work / "lines2"),
-                        "lines": [dict(x, speaker=ln.speaker) for x, ln in zip(tts_lines(changed), changed)],
-                        "refs": refs, "cfg_weight": 0.0, "exaggeration": 0.5},
+                "tts": dict(voice_job, out_dir=str(work / "lines2"), refs=refs,
+                            lines=[dict(x, speaker=ln.speaker) for x, ln in zip(tts_lines(changed), changed)]),
             }, work, ctx=ctx, on_stage=lambda s, f: spans.report("fit", 0.3 + 0.4 * f, "saying the shorter lines"))
             for d in again["lines"]:
                 if d["seconds"] < said[d["id"]]["seconds"]:

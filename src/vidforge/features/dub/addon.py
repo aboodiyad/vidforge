@@ -1,4 +1,4 @@
-"""The voice add-on: a separate Python environment with PyTorch, Demucs and Chatterbox.
+"""The voice add-on: a separate Python environment with PyTorch, Demucs, Chatterbox and XTTS.
 
 It lives in the data folder (addons\\voice), not in VidForge's own environment: Chatterbox needs
 numpy 1.x and a fixed PyTorch, and PyTorch with CUDA is about 3 GB that people who only upscale
@@ -19,11 +19,13 @@ from ...core import paths
 from ...core.gpu import GpuInfo
 from ...core.process import CancelToken, run_process
 
-VERSION = 1  # bump when the requirements change, so old installs are redone
+VERSION = 2  # bump when the requirements change, so old installs are redone
+# The add-on version each voice first came in; an older add-on can still use the voices it has.
+ENGINE_SINCE = {"chatterbox": 1, "xtts": 2}
 TORCH = ("torch==2.6.0", "torchaudio==2.6.0")
 TORCH_INDEX = {"cuda": "https://download.pytorch.org/whl/cu124", "cpu": "https://download.pytorch.org/whl/cpu"}
 CHATTERBOX = "chatterbox-tts==0.1.7"
-INSTALL_MB = {"cuda": 5200, "cpu": 1600}  # disk space after install, roughly
+INSTALL_MB = {"cuda": 5500, "cpu": 1900}  # disk space after install, roughly
 
 
 def root() -> Path:
@@ -39,18 +41,20 @@ def _marker() -> Path:
 
 
 def status() -> dict | None:
-    """The install record ({version, device}) if the add-on is installed and current."""
+    """The install record ({version, device}) if the add-on is installed (any version this
+    VidForge knows; see is_installed for whether it has a given voice)."""
     try:
         data = json.loads(_marker().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if data.get("version") != VERSION or not python().is_file():
+    if not isinstance(data.get("version"), int) or data["version"] > VERSION or not python().is_file():
         return None
     return data
 
 
-def is_installed() -> bool:
-    return status() is not None
+def is_installed(engine: str = "chatterbox") -> bool:
+    st = status()
+    return st is not None and st.get("version", 0) >= ENGINE_SINCE.get(engine, VERSION)
 
 
 def device_for(gpu: GpuInfo | None) -> str:

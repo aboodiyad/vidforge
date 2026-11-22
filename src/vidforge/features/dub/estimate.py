@@ -20,7 +20,8 @@ from . import addon, models
 LLM_SPEED = {("best", "gpu"): 20.0, ("quick", "gpu"): 100.0, ("best", "cpu"): 3.0, ("quick", "cpu"): 12.0}
 LLM_STARTUP = 20.0
 SEPARATE_SPEED = {"gpu": 8.0, "cpu": 0.8}  # seconds of sound per second
-TTS_SPEED = {"gpu": 0.75, "cpu": 0.07}  # seconds of new speech per second
+# seconds of new speech per second (measured on the test clip: Chatterbox ~0.7x real time, XTTS ~1.9x)
+TTS_SPEED = {("chatterbox", "gpu"): 0.75, ("chatterbox", "cpu"): 0.07, ("xtts", "gpu"): 1.8, ("xtts", "cpu"): 0.15}
 WORKER_STARTUP = 35.0  # starting PyTorch and loading the voice
 LLAMA_TOOL_MB = 750.0
 AUDIO_BITRATE = 192_000
@@ -35,12 +36,14 @@ def _speed(stats: dict, key: str, default: float) -> tuple[float, bool]:
     return (float(v), True) if v else (default, False)
 
 
-def learned_cps(stats: dict) -> dict:
-    return {k.split("/")[-1]: v for k, v in stats.get("speed", {}).items() if k.startswith("dub/cps/")}
+def learned_cps(stats: dict, voice: str = "chatterbox") -> dict:
+    """{language: characters per second} this voice was measured to speak."""
+    prefix = f"dub/cps/{voice}/"
+    return {k[len(prefix):]: v for k, v in stats.get("speed", {}).items() if k.startswith(prefix)}
 
 
 def estimate(info, *, level: str, dub: bool, add_to_video: bool, target: str, gpu: GpuInfo | None,
-             transcript=None, stats: dict | None = None) -> up.Estimate:
+             transcript=None, stats: dict | None = None, voice: str = "chatterbox") -> up.Estimate:
     stats = up.load_stats() if stats is None else stats
     dev = device(gpu)
     dur = info.duration or 0.0
@@ -62,7 +65,7 @@ def estimate(info, *, level: str, dub: bool, add_to_video: bool, target: str, gp
         v, ln = _speed(stats, f"dub/separate/{dev}", SEPARATE_SPEED[dev])
         secs += WORKER_STARTUP + dur / v
         learned_any |= ln
-        v, ln = _speed(stats, f"dub/tts/{dev}", TTS_SPEED[dev])
+        v, ln = _speed(stats, f"dub/tts/{voice}/{dev}", TTS_SPEED[(voice, dev)])
         secs += spoken / v
         learned_any |= ln
         secs += dur / 150 + 5  # fitting, mixing and saving
@@ -76,7 +79,7 @@ def estimate(info, *, level: str, dub: bool, add_to_video: bool, target: str, gp
         size += p.stat().st_size if p.is_file() else 0
         if dub:
             size += dur * AUDIO_BITRATE / 8
-    download = models.download_mb(level, voice=dub)
+    download = models.download_mb(level, voice=voice if dub else None)
     if tools.locate("llama")[0] is None:
         download += LLAMA_TOOL_MB
     return up.Estimate(width=0, height=0, mode="dub", seconds=secs, seconds_low=secs * lo, seconds_high=secs * hi,

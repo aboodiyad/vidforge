@@ -201,11 +201,15 @@ def test_estimate_parts_and_learning(tmp_path):
     assert fresh.seconds > subs.seconds  # must write down the speech first
     assert dub.download_mb > subs.download_mb > 0  # translator, voice models, llama.cpp
     assert not dub.learned
-    estimate.learn("dub/tts/gpu", 3.0)
+    xtts = estimate.estimate(info(), level="best", dub=True, add_to_video=False, target="ar", gpu=gpu, transcript=tr,
+                             voice="xtts")
+    assert xtts.seconds < dub.seconds  # XTTS speaks faster than real time
+    estimate.learn("dub/tts/chatterbox/gpu", 3.0)
     again = estimate.estimate(info(), level="best", dub=True, add_to_video=False, target="ar", gpu=gpu, transcript=tr)
     assert again.learned and again.seconds < dub.seconds
-    estimate.learn("dub/cps/ar", 9.0)
-    assert estimate.learned_cps(estimate.up.load_stats()) == {"ar": 9.0}
+    estimate.learn("dub/cps/xtts/ar", 9.0)
+    assert estimate.learned_cps(estimate.up.load_stats(), "xtts") == {"ar": 9.0}
+    assert estimate.learned_cps(estimate.up.load_stats(), "chatterbox") == {}
 
 
 def test_models_are_pinned_and_share_a_folder():
@@ -215,13 +219,20 @@ def test_models_are_pinned_and_share_a_folder():
         assert len(model_registry.MODELS[key].sha256) == 64
     paths = {model_registry.model_path(f"chatterbox-{f}").parent for f, _, _ in models.VOICE_FILES}
     assert len(paths) == 1 and paths.pop().name == models.VOICE_FOLDER
-    assert {"ar", "en", "fr"} <= models.VOICE_LANGUAGES
+    for engine in models.ENGINES:
+        assert {"ar", "en", "fr"} <= models.VOICE_LANGUAGES[engine]
+        keys = models.voice_keys(engine)
+        assert models.DEMUCS_KEY in keys and "chatterbox-ve.pt" in keys  # speakers always use ve.pt
+    assert any(k.startswith("xtts-") for k in models.voice_keys("xtts"))
+    assert not any(k.startswith("xtts-") for k in models.voice_keys("chatterbox"))
+    assert not model_registry.MODELS["xtts-model.pth"].commercial_ok
+    assert models.download_mb("best", voice="xtts") < models.download_mb("best", voice="chatterbox")
 
 
 def test_friendly_errors(monkeypatch, tmp_path):
     from vidforge.gui import i18n
 
-    monkeypatch.setattr(addon, "is_installed", lambda: False)
+    monkeypatch.setattr(addon, "is_installed", lambda engine="chatterbox": False)
     with pytest.raises(FriendlyError) as e:
         service._check(service.DubRequest(tmp_path / "a.mp4", target="ur", dub=True))
     assert e.value.code == "voice_language" and e.value.params["lang"] == "اردو"
@@ -229,6 +240,14 @@ def test_friendly_errors(monkeypatch, tmp_path):
         service._check(service.DubRequest(tmp_path / "a.mp4", target="ar", dub=True))
     assert e.value.code == "voice_addon"
     service._check(service.DubRequest(tmp_path / "a.mp4", target="ur", dub=False))  # subtitles only: fine
+    with pytest.raises(FriendlyError) as e:  # Swahili: Chatterbox yes, XTTS no
+        service._check(service.DubRequest(tmp_path / "a.mp4", target="sw", dub=True, voice="xtts"))
+    assert e.value.code == "voice_language"
+    monkeypatch.setattr(addon, "is_installed", lambda engine="chatterbox": engine == "chatterbox")
+    service._check(service.DubRequest(tmp_path / "a.mp4", target="ar", dub=True))
+    with pytest.raises(FriendlyError) as e:  # an add-on from before XTTS
+        service._check(service.DubRequest(tmp_path / "a.mp4", target="ar", dub=True, voice="xtts"))
+    assert e.value.code == "voice_addon"
     with pytest.raises(FriendlyError) as e:
         service._check(service.DubRequest(tmp_path / "a.mp4", target="xx", dub=False))
     assert e.value.code == "bad_language"
@@ -284,8 +303,11 @@ def test_addon_paths_and_status(tmp_path):
     addon.python().write_text("")
     (addon.root() / "vidforge-addon.json").write_text(json.dumps({"version": addon.VERSION, "device": "cuda"}))
     assert addon.is_installed()
-    (addon.root() / "vidforge-addon.json").write_text(json.dumps({"version": 0, "device": "cuda"}))
-    assert not addon.is_installed()  # an old install is redone
+    assert addon.is_installed("xtts")
+    (addon.root() / "vidforge-addon.json").write_text(json.dumps({"version": 1, "device": "cuda"}))
+    assert addon.is_installed("chatterbox") and not addon.is_installed("xtts")  # from before XTTS
+    (addon.root() / "vidforge-addon.json").write_text(json.dumps({"version": 99, "device": "cuda"}))
+    assert not addon.is_installed()  # made by a newer VidForge
     assert addon.requirements_file().is_file()
 
 
@@ -294,3 +316,20 @@ def test_cli_parses_dub():
 
     a = build_parser().parse_args(["dub", "x.mp4", "--to", "fr", "--subtitles-only", "--level", "quick"])
     assert a.to == "fr" and a.subtitles_only and a.level == "quick" and a.func.__name__ == "cmd_dub"
+    assert a.voice == "chatterbox"
+    assert build_parser().parse_args(["dub", "x.mp4", "--voice", "xtts"]).voice == "xtts"
+
+
+def test_xtts_language_codes():
+    from vidforge.features.dub import models
+
+    assert models.XTTS_CODES["zh"] == "zh-cn"
+    assert set(voice_worker.ENGINES) == set(models.ENGINES)
+
+
+def test_every_page_language_has_names_and_tags():
+    from vidforge.features.subtitles.service import ISO3
+    from vidforge.gui.pages.subtitles import LANGUAGES
+
+    for code, _ in LANGUAGES:
+        assert code in tl.LANGUAGE_NAMES and code in tl.NATIVE_NAMES and code in ISO3, code

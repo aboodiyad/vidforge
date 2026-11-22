@@ -347,6 +347,18 @@ S: dict[str, tuple[str, str]] = {
         "A subtitle file (.srt) is always saved next to the video too.",
         "يُحفظ أيضًا دائمًا ملف ترجمة (‎.srt) بجانب الفيديو.",
     ),
+    "db.engine": ("Which voice maker?", "أي صانع صوت؟"),
+    "db.engine.chatterbox": ("Natural", "طبيعي"),
+    "db.engine.xtts": ("XTTS (personal use)", "XTTS · استخدام شخصي"),
+    "db.engine.chatterbox.desc": (
+        "Sounds the most natural and speaks 23 languages. Best for most videos.",
+        "الأكثر طبيعية ويتكلم 23 لغة. الأفضل لمعظم الفيديوهات.",
+    ),
+    "db.engine.xtts.desc": (
+        "Another voice maker, about twice as fast. Try it if the voices don't sound right. Free for personal use only, not for selling.",
+        "صانع صوت آخر، أسرع بمرتين تقريبًا. جرّبه إذا لم تبدُ الأصوات صحيحة. مجاني للاستخدام الشخصي فقط، وليس للبيع.",
+    ),
+    "db.engine.no_lang": ("It can't speak this language.", "لا يتكلم هذه اللغة."),
     "db.level": ("How should it translate?", "كيف يترجم؟"),
     "db.level.best": ("Best", "الأفضل"),
     "db.level.quick": ("Quick", "سريع"),
