@@ -17,6 +17,7 @@ from .i18n import tr
 from .pages.faces import FacesPage
 from .pages.placeholder import ComingSoonPage
 from .pages.settings import SettingsPage
+from .pages.subtitles import SubtitlesPage
 from .pages.system import SystemPage
 from .pages.upscale import UpscalePage
 from .widgets.common import label
@@ -72,7 +73,7 @@ class MainWindow(QMainWindow):
         pages = [
             ("upscale", tr("nav.upscale"), False, UpscalePage(self.bridge, self.settings)),
             ("face", tr("nav.faces"), False, FacesPage(self.bridge, self.settings)),
-            ("subtitles", tr("nav.subtitles"), True, ComingSoonPage("subs", "subtitles")),
+            ("subtitles", tr("nav.subtitles"), False, SubtitlesPage(self.bridge, self.settings)),
             ("translate", tr("nav.dub"), True, ComingSoonPage("dub", "translate")),
         ]
         bottom_pages = [

@@ -88,6 +88,15 @@ TOOLS: dict[str, ToolSpec] = {
             milestone="M3",
         ),
         ToolSpec(
+            key="whisper-cpu",
+            display="whisper.cpp (CPU)",
+            exe="whisper-cli.exe",
+            version_args=("--help",),
+            version_regex=r"(usage)",
+            source=GithubSource("ggml-org/whisper.cpp", r"^whisper-blas-bin-x64\.zip$"),
+            milestone="M3",  # for PCs without an NVIDIA card
+        ),
+        ToolSpec(
             key="llama",
             display="llama.cpp (CUDA)",
             exe="llama-server.exe",

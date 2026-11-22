@@ -25,6 +25,11 @@ class Settings:
     face_fidelity: float = 0.7
     face_size: str = "keep"
     face_background: str = "auto"
+    subs_language: str = "auto"
+    subs_translate: bool = False
+    subs_level: str = "balanced"
+    subs_add_to_video: bool = False
+    subs_audio_track: int = 0
     gpu_index: int = 0
     output_dir: str = ""
     keep_temp_files: bool = False

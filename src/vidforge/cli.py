@@ -165,6 +165,22 @@ def cmd_faces(args) -> int:
     return _run_jobs(args, make)
 
 
+def cmd_subs(args) -> int:
+    from .features.subtitles.service import SubtitleRequest, run_subtitles
+
+    _, output_dir = _out(args)
+
+    def make(path: Path):
+        req = SubtitleRequest(
+            input=path, output_dir=output_dir, audio_track=args.track - 1, language=args.language,
+            translate=args.english, level=args.level, add_to_video=args.add_to_video,
+            gpu_index=args.gpu, overwrite=args.overwrite,
+        )
+        return lambda ctx: run_subtitles(req, ctx)
+
+    return _run_jobs(args, make)
+
+
 def cmd_vsr_probe(args) -> int:
     ok, detail = gpu.probe_vsr()
     state = {True: "OK", False: "FAILED", None: "SKIPPED"}[ok]
@@ -232,6 +248,20 @@ def build_parser() -> argparse.ArgumentParser:
     fx.add_argument("--overwrite", action="store_true")
     fx.add_argument("-v", "--verbose", action="store_true")
     fx.set_defaults(func=cmd_faces)
+
+    sb = sub.add_parser("subs", help="write subtitles (.srt) from the speech in videos")
+    sb.add_argument("files", nargs="+")
+    sb.add_argument("-l", "--language", default="auto", help="spoken language: auto (default) or a code like en, ar, fr")
+    sb.add_argument("--english", action="store_true", help="write English subtitles whatever the spoken language")
+    sb.add_argument("--level", choices=["quick", "balanced", "best"], default="balanced")
+    sb.add_argument("--add-to-video", action="store_true", help="also save a copy of the video with the subtitles inside")
+    sb.add_argument("--track", type=int, default=1, help="sound track number (1 = first)")
+    sb.add_argument("--output-dir")
+    sb.add_argument("-o", "--output", help=argparse.SUPPRESS)
+    sb.add_argument("--gpu", type=int, default=0)
+    sb.add_argument("--overwrite", action="store_true")
+    sb.add_argument("-v", "--verbose", action="store_true")
+    sb.set_defaults(func=cmd_subs)
     return p
 
 

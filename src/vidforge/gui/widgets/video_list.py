@@ -105,10 +105,11 @@ class VideoRow(QFrame):
             self.size[1].setText("")
             self.time[1].setText("")
             return
-        self.arrow.setText(tr("row.arrow"))
+        same_picture = e.width == 0
+        self.arrow.setText("" if same_picture else tr("row.arrow"))
         self.after.setObjectName("RowAfter")
         theme.repolish(self.after)
-        self.after.setText(tr("u.res", w=e.width, h=e.height))
+        self.after.setText("" if same_picture else tr("u.res", w=e.width, h=e.height))
         self.size[1].setText(i18n.about(i18n.size(est.round_nice(e.bytes))))
         self.size[1].setToolTip(f"{i18n.size(e.bytes_low)} – {i18n.size(e.bytes_high)}")
         self.time[1].setText(i18n.about_time(e.seconds))

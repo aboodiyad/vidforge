@@ -12,9 +12,11 @@ A Windows app for making videos look better, built from open-source parts.
 - **Fix faces** in videos: finds every face, follows it from frame to frame, and makes it clear and
   sharp with GFPGAN (natural) or CodeFormer (strong repair, free for personal use only). It can
   make the video bigger at the same time.
+- **Write the words**: listens to the video and writes subtitles (.srt) in the spoken language or
+  in English, with each line at the right moment. Can also add them inside a copy of the video.
 - **English and Arabic** (right-to-left). Change it in **Settings**.
 
-**Coming next**: subtitle generation, translation and dubbing.
+**Coming next**: translation and dubbing.
 
 ## Try it
 
@@ -46,6 +48,8 @@ Later, just double-click **`Start VidForge.bat`** again.
 .venv\Scripts\vidforge upscale --help
 .venv\Scripts\vidforge faces my_video.mp4 --model gfpgan --size keep
 .venv\Scripts\vidforge faces --help
+.venv\Scripts\vidforge subs my_video.mp4 --level balanced
+.venv\Scripts\vidforge subs --help
 ```
 
 ## Credits
@@ -54,6 +58,8 @@ Later, just double-click **`Start VidForge.bat`** again.
 - [GFPGAN](https://github.com/TencentARC/GFPGAN) (Apache-2.0) and [CodeFormer](https://github.com/sczhou/CodeFormer)
   (S-Lab License 1.0, non-commercial) face models, [YuNet](https://github.com/opencv/opencv_zoo) face detector (MIT),
   as ONNX files from [FaceFusion's model releases](https://github.com/facefusion/facefusion-assets)
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with OpenAI Whisper models (MIT) and the
+  [Silero](https://github.com/snakers4/silero-vad) voice detector (MIT)
 - [OpenCV](https://opencv.org) (Apache-2.0); interface font IBM Plex Sans Arabic (SIL Open Font License)
 - [FFmpeg](https://ffmpeg.org) (GPL build from [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds))
 - [ONNX Runtime](https://onnxruntime.ai) with DirectML, [Qt for Python (PySide6)](https://doc.qt.io/qtforpython/)

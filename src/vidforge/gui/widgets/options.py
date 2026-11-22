@@ -58,7 +58,8 @@ class MoreOptions:
 class OutputRows:
     """Video format, file size, file type and save folder, stored in the shared settings."""
 
-    def __init__(self, more: MoreOptions, settings: Settings, on_change):
+    def __init__(self, more: MoreOptions, settings: Settings, on_change, video: bool = True):
+        """video=False shows only the save folder (for pages that don't make a new video)."""
         self.settings = settings
         self.on_change = on_change
         s = settings
@@ -74,9 +75,10 @@ class OutputRows:
         folder_row.addWidget(self.folder, 1)
         folder_row.addWidget(self.folder_reset)
         folder_row.addWidget(pick)
-        more.row(tr("more.quality"), self.quality)
-        more.row(tr("more.codec"), self.codec)
-        more.row(tr("more.container"), self.container)
+        if video:
+            more.row(tr("more.quality"), self.quality)
+            more.row(tr("more.codec"), self.codec)
+            more.row(tr("more.container"), self.container)
         more.row(tr("more.folder"), folder_row)
         self.set_folder(s.output_dir, save=False)
 

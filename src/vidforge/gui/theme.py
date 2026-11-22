@@ -138,6 +138,10 @@ QRadioButton::indicator:checked {{
     background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,
         stop:0 {ACCENT}, stop:0.48 {ACCENT}, stop:0.56 {RAISED}, stop:1 {RAISED});
 }}
+QCheckBox {{ spacing: 10px; padding: 4px 0; }}
+QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 1px solid {LINE_STRONG}; background: {RAISED}; }}
+QCheckBox::indicator:hover {{ border-color: {TEXT_3}; }}
+QCheckBox::indicator:checked {{ border-color: {ACCENT}; background: {ACCENT}; }}
 QSlider::groove:horizontal {{ height: 4px; background: {LINE_STRONG}; border-radius: 2px; }}
 QSlider::sub-page:horizontal {{ background: {ACCENT}; border-radius: 2px; }}
 QSlider::handle:horizontal {{ width: 16px; height: 16px; margin: -7px 0; border-radius: 8px; background: {TEXT}; }}
