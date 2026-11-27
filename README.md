@@ -61,6 +61,12 @@ winget install JRSoftware.InnoSetup
 - **Auto** mode picks Fast on RTX cards and Quality on everything else.
 - Quality mode downloads its AI model (5–67 MB) the first time you use it.
 - Quality mode is much slower than Fast: start with a short clip.
+- **NVIDIA speed-up** (RTX 20 series and newer): on the Make bigger page, Best quality offers a
+  one-time download (about 350–450 MB, only the parts your card needs) that runs the AI on
+  NVIDIA's TensorRT. On an RTX 2060 SUPER it made Best quality about 2× faster with the same
+  pictures; Fix faces uses it too when it makes the background bigger with Best quality.
+- **Updates:** VidForge shows a "New version" button when one is out. Download it and install it
+  over the old one: programs, AI files and settings you already have are kept.
 - The **System** page shows your GPU and can test whether RTX Video Super Resolution works.
 - Translate & dub downloads its AI files the first time: the translator (7.3 GB for Best, 5 GB for
   Quick) and the voice models (3.3 GB). A new voice takes about twice as long as the video on an
@@ -72,6 +78,10 @@ winget install JRSoftware.InnoSetup
 - XTTS downloads its own voice files (1.9 GB) the first time you pick it.
 
 ## Command line
+
+In an installed copy, use VidForge's own Python, for example
+`& "$env:LOCALAPPDATA\Programs\VidForge\python\python.exe" -m vidforge upscale my_video.mp4`.
+From the source code:
 
 ```powershell
 .venv\Scripts\vidforge upscale my_video.mp4 --size 2160p --mode auto

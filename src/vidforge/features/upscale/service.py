@@ -120,6 +120,7 @@ def run_upscale(req: UpscaleRequest, ctx: JobContext) -> Path:
                 quality.QualityOptions(w, h, req.model, req.codec, req.quality,
                                        device_id=_dml_device(gpu)),
                 gpu.vendor if gpu else "other",
+                gpu=gpu,
                 on_progress=progress, on_log=ctx.log, cancel=ctx.cancel,
             )
 

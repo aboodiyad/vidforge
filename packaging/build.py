@@ -110,10 +110,12 @@ def trim_and_compile(python: Path) -> None:
     for pattern in TRIM_GLOBS:
         for p in base.glob(pattern):
             p.unlink()
-    # Command shortcuts packages add (Qt tools, test runners); only VidForge's own are kept.
+    # pip's command launchers (vidforge.exe, Qt tools, test runners) hold the absolute path of the
+    # Python they were made with, i.e. this build folder, so they can't work once installed
+    # elsewhere. The app starts with "pythonw -m vidforge.app"; the command line is
+    # "python -m vidforge".
     for p in (base / "Scripts").glob("*.exe"):
-        if not p.name.lower().startswith("vidforge"):
-            p.unlink()
+        p.unlink()
     for cache in base.rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
     # Compiled now, so the files exist at install time and the uninstaller removes them.

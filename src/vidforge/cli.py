@@ -201,6 +201,8 @@ def cmd_dub(args) -> int:
 def cmd_addon(args) -> int:
     from .features.dub import addon
 
+    if args.which == "nvidia":
+        return _nvidia_addon(args)
     if args.action == "status":
         st = addon.status()
         print(f"voice add-on: {'installed (' + st['device'] + ')' if st else 'not installed'} at {addon.root()}")
@@ -217,6 +219,31 @@ def cmd_addon(args) -> int:
     addon.install(g[0] if g else None, cancel=CancelToken(),
                   on_log=(print if args.verbose else (lambda line: None)),
                   on_step=lambda i, n, name: print(f"[{i}/{n}] {name}"))
+    print("done")
+    return 0
+
+
+def _nvidia_addon(args) -> int:
+    from .core.process import CancelToken
+    from .features.upscale import speedup
+
+    g = next((x for x in gpu.detect_gpus() if speedup.supported(x)), None)
+    if args.action == "status":
+        st = speedup.status()
+        where = f"installed ({st['resource']}, TensorRT {st['tensorrt']})" if st else "not installed"
+        print(f"NVIDIA speed-up: {where}; this PC {'can use it' if g else 'has no supported card'}")
+        return 0
+    if args.action == "remove":
+        speedup.remove()
+        print("NVIDIA speed-up removed")
+        return 0
+    if g is None:
+        print("The NVIDIA speed-up needs an NVIDIA RTX card (RTX 20 series or newer).", file=sys.stderr)
+        return 1
+    print(f"Installing the NVIDIA speed-up for {g.name} (about {speedup.download_mb(g):.0f} MB)")
+    speedup.install(g, cancel=CancelToken(), progress=_progress_printer("Downloading"),
+                    on_log=(print if args.verbose else (lambda line: None)))
+    print()
     print("done")
     return 0
 
@@ -330,8 +357,9 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("-v", "--verbose", action="store_true")
     d.set_defaults(func=cmd_dub)
 
-    a = sub.add_parser("addon", help="install or remove the voice add-on (PyTorch, for dubbing)")
+    a = sub.add_parser("addon", help="install or remove an add-on: voice (for dubbing) or nvidia (TensorRT speed-up)")
     a.add_argument("action", choices=["status", "install", "remove"])
+    a.add_argument("which", nargs="?", choices=["voice", "nvidia"], default="voice")
     a.add_argument("-v", "--verbose", action="store_true")
     a.set_defaults(func=cmd_addon)
     return p

@@ -27,7 +27,9 @@ from ...core.media import MediaInfo
 from .models import QUALITY_MODELS, onnx_path
 
 # Pixels per second (output pixels for fast, input pixels for quality) and fixed start-up time.
-DEFAULT_SPEED = {"fast": 3.2e8, "quality/general": 4.5e6, "quality/anime": 7.9e6, "quality/max": 2.0e5}
+DEFAULT_SPEED = {"fast": 3.2e8, "quality/general": 4.5e6, "quality/anime": 7.9e6, "quality/max": 2.0e5,
+                 # with the NVIDIA speed-up (TensorRT), measured the same way
+                 "quality-trt/general": 8.4e6, "quality-trt/anime": 1.5e7, "quality-trt/max": 4.0e5}
 STARTUP_S = {"fast": 3.5, "quality": 5.0}
 
 # How much picture information a bit carries, relative to H.264 (higher = more efficient).
@@ -81,8 +83,20 @@ def _save_stats(data: dict) -> None:
     tmp.replace(f)
 
 
-def speed_key(mode: str, model: str) -> str:
-    return "fast" if mode == "fast" else f"quality/{model}"
+def _trt() -> bool:
+    try:
+        from . import speedup
+
+        return speedup.is_installed()
+    except Exception:  # noqa: BLE001 - estimates never fail
+        return False
+
+
+def speed_key(mode: str, model: str, trt: bool | None = None) -> str:
+    """Speeds are kept apart for DirectML and TensorRT (the NVIDIA speed-up), which differ ~2x."""
+    if mode == "fast":
+        return "fast"
+    return f"quality{'-trt' if (_trt() if trt is None else trt) else ''}/{model}"
 
 
 def size_key(mode: str, codec: str, quality: str) -> str:

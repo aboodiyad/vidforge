@@ -19,6 +19,7 @@ from ..i18n import tr
 from ..tasks import run_in_background
 from ..widgets.common import ChipGroup, Page, Tile, label
 from ..widgets.options import MoreOptions, OutputRows, combo
+from ..widgets.speedup import SpeedupCard
 from ..widgets.video_list import ActionBar, VideoList
 
 SIZE_ORDER = ("1080p", "1440p", "2160p", "2x", "3x", "4x")
@@ -78,6 +79,8 @@ class UpscalePage(QWidget):
         holder.setLayout(tiles)
         self.page.add(holder, 16)
         self.fast_tile.estimate.setText(tr("mode.checking"))
+        self.speedup = SpeedupCard(bridge, on_done=self._recalc)
+        self.page.add(self.speedup.box, 16)
 
         self.more = MoreOptions()
         self.model = combo([(k, tr(f"model.{k}")) for k in ("general", "max", "anime")], settings.upscale_model,
@@ -150,6 +153,7 @@ class UpscalePage(QWidget):
         self.quality_tile.set_selected(mode == "quality")
         self.model.setEnabled(mode == "quality")
         self.vsr.setEnabled(mode == "fast")
+        self.speedup.refresh(self.gpu, mode == "quality")
         if save:
             self.settings.upscale_mode = mode
             self.settings.save()

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vidforge"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local video upscaling, face enhancement, subtitles and dubbing for Windows"
 requires-python = ">=3.11"
 dependencies = [

@@ -23,7 +23,7 @@ from ...core.gpu import GpuInfo
 from ...core.media import MediaInfo
 from ...core.process import CancelToken
 from ..upscale import nvencc_vsr
-from ..upscale.esrgan_onnx import EsrganEngine
+from ..upscale.quality import AutoEngine
 from ..upscale.models import QUALITY_MODELS, ensure_onnx
 from .detect import FaceDetector
 from .enhancer import EnhanceSettings, FaceEnhancer, FrameStats
@@ -97,8 +97,8 @@ def run(
         progress_base, progress_span = FAST_SHARE, 1.0 - FAST_SHARE
     elif opts.background == "quality":
         spec = QUALITY_MODELS[opts.esrgan_model]
-        engine = EsrganEngine(ensure_onnx(opts.esrgan_model, progress=dl, cancel=cancel),
-                              device_id=opts.device_id, tile=spec.tile)
+        engine = AutoEngine(opts.esrgan_model, ensure_onnx(opts.esrgan_model, progress=dl, cancel=cancel),
+                            device_id=opts.device_id, gpu=gpu, on_log=on_log)
         on_log(f"background model {spec.model_key} on {engine.provider}")
 
     try:

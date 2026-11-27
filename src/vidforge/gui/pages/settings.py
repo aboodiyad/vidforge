@@ -7,7 +7,7 @@ import sys
 
 from PySide6.QtCore import QProcess, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QApplication, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QRadioButton
+from PySide6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QRadioButton
 
 from ... import __version__
 from ...core import gpu as gpu_mod
@@ -95,6 +95,16 @@ class SettingsPage(Page):
         self.body.addLayout(row)
         self.body.addSpacing(26)
 
+        # updates
+        self.section(tr("set.updates"))
+        self.updates = QCheckBox(tr("set.updates.check"))
+        self.updates.setChecked(settings.check_updates)
+        self.updates.toggled.connect(self._updates)
+        self.body.addWidget(self.updates)
+        self.body.addSpacing(4)
+        self.body.addWidget(label(tr("set.updates.help"), "Hint", wrap=True))
+        self.body.addSpacing(26)
+
         # about
         self.section(tr("set.about"))
         self.body.addWidget(label(tr("set.about.text", v=__version__), "Body", wrap=True))
@@ -103,6 +113,10 @@ class SettingsPage(Page):
         link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(REPO_URL)))
         self.body.addWidget(link, 0, Qt.AlignmentFlag.AlignLeading)
         self.finish()
+
+    def _updates(self, on: bool) -> None:
+        self.settings.check_updates = on
+        self.settings.save()
 
     def _language(self, value: str) -> None:
         self.settings.language = value

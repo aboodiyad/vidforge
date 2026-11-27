@@ -113,6 +113,16 @@ S: dict[str, tuple[str, str]] = {
     "sum.added": ("Added to the list below. You can keep adding videos.", "أُضيفت إلى القائمة بالأسفل. يمكنك إضافة المزيد."),
     "up.start": ("Start", "ابدأ"),
 
+    "speedup.title": ("Make Best quality about twice as fast", "اجعل «أفضل جودة» أسرع بمرتين تقريبًا"),
+    "speedup.desc": (
+        "Your NVIDIA card can run the AI faster with NVIDIA's own engine. A one-time download of about {mb} MB. The pictures stay the same.",
+        "تستطيع بطاقة NVIDIA تشغيل الذكاء الاصطناعي أسرع بمحرك NVIDIA الخاص. تنزيل لمرة واحدة بحجم {mb} ميغابايت تقريبًا. الصور تبقى كما هي.",
+    ),
+    "speedup.install": ("Install speed-up", "ثبّت التسريع"),
+    "speedup.installing": ("Installing… you can watch it in your list below.", "جارٍ التثبيت… يمكنك متابعته في القائمة بالأسفل."),
+    "speedup.downloading": ("Downloading the NVIDIA speed-up", "جارٍ تنزيل تسريع NVIDIA"),
+    "speedup.job": ("Installing the NVIDIA speed-up", "تثبيت تسريع NVIDIA"),
+
     # --- jobs ---
     "jobs.title": ("Your list", "قائمتك"),
     "jobs.empty": ("Nothing here yet. Videos you start show up here.", "لا شيء هنا بعد. ستظهر هنا الفيديوهات التي تبدأها."),
@@ -170,6 +180,19 @@ S: dict[str, tuple[str, str]] = {
     ),
     "first.retry": ("Try again", "حاول مرة أخرى"),
     "first.quit": ("Close", "إغلاق"),
+
+    # --- updates ---
+    "update.available": ("New version {v}", "إصدار جديد {v}"),
+    "update.tip": (
+        "Opens the download page. Install it over this one: everything already downloaded is kept.",
+        "يفتح صفحة التنزيل. ثبّته فوق هذا الإصدار: كل ما نُزّل من قبل يبقى كما هو.",
+    ),
+    "set.updates": ("New versions", "الإصدارات الجديدة"),
+    "set.updates.check": ("Tell me when a new version is out", "أخبرني عند صدور إصدار جديد"),
+    "set.updates.help": (
+        "When VidForge starts, it asks GitHub for the newest version number. Nothing about you or your videos is sent.",
+        "عند بدء VidForge يسأل GitHub عن رقم أحدث إصدار. لا يُرسَل أي شيء عنك أو عن فيديوهاتك.",
+    ),
 
     # --- settings ---
     "set.title": ("Settings", "الإعدادات"),

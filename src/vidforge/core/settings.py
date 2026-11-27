@@ -43,6 +43,7 @@ class Settings:
     gpu_index: int = 0
     output_dir: str = ""
     keep_temp_files: bool = False
+    check_updates: bool = True  # ask GitHub at start whether a newer version exists
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Settings":

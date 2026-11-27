@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QSizePolicy, QStackedWidget,
     QVBoxLayout, QWidget,
 )
 
 from .. import __version__
+from ..core import update
 from ..core.jobs import JobQueue
 from ..core.settings import Settings
 from . import icons, theme
@@ -20,7 +22,8 @@ from .pages.settings import SettingsPage
 from .pages.subtitles import SubtitlesPage
 from .pages.system import SystemPage
 from .pages.upscale import UpscalePage
-from .widgets.common import label
+from .tasks import run_in_background
+from .widgets.common import button, label
 from .widgets.job_queue import JobQueueWidget
 
 
@@ -108,7 +111,15 @@ class MainWindow(QMainWindow):
         rl.addStretch(1)
         add(bottom_pages)
         rl.addSpacing(8)
+        # Shown when GitHub has a newer version; opens the download page.
+        self.update_btn = button(tr("update.available", v=""), "sparkle")
+        self.update_btn.setVisible(False)
+        self.update_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(update.RELEASES_URL)))
+        rl.addWidget(self.update_btn)
+        rl.addSpacing(6)
         rl.addWidget(label(f"v{__version__}", "BrandTag"))
+        if self.settings.check_updates:
+            run_in_background(update.newer_version, self._on_update)
         self.group.button(0).setChecked(True)
 
         content = QWidget()
@@ -126,6 +137,12 @@ class MainWindow(QMainWindow):
         hl.addWidget(rail)
         hl.addWidget(content, 1)
         self.setCentralWidget(root)
+
+    def _on_update(self, version) -> None:
+        if isinstance(version, str) and version:
+            self.update_btn.setText(tr("update.available", v=version))
+            self.update_btn.setToolTip(tr("update.tip"))
+            self.update_btn.setVisible(True)
 
     def closeEvent(self, event) -> None:
         self.queue.shutdown()
